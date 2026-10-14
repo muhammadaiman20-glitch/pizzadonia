@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-cream: #fff7ec;
+  --color-paper: #fffdf8;
+  --color-ink: #2a1a12;
+  --color-muted: #7a6558;
+  --color-line: #f0e1cf;
+  --color-tomato: #e23d2d;
+  --color-tomato-deep: #b8281b;
+  --color-cheese: #ffc94a;
+  --color-crust: #c9732a;
+  --color-basil: #2f7d4f;
+  --font-display: 'Lilita One', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --shadow-card: 0 1px 2px rgb(42 26 18 / 0.06), 0 8px 24px -12px rgb(42 26 18 / 0.18);
+  --shadow-pop: 0 18px 50px -18px rgb(184 40 27 / 0.45);
+}
+
+html { -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* soft dotted "flour" texture */
+.dots {
+  background-image: radial-gradient(rgb(201 115 42 / 0.12) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+/* in the components layer so Tailwind utilities (hidden, lg:flex, w-full...) can override them */
+@layer components {
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  border-radius: 9999px; font-weight: 700; transition: transform 0.12s, background 0.15s, box-shadow 0.15s;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; pointer-events: none; }
+.btn-red { background: var(--color-tomato); color: #fff; box-shadow: var(--shadow-pop); }
+.btn-red:hover { background: var(--color-tomato-deep); }
+.btn-ghost { background: #fff; color: var(--color-ink); border: 1px solid var(--color-line); }
+.btn-ghost:hover { background: #fff3e3; }
+.field {
+  width: 100%; border-radius: 14px; border: 1.5px solid var(--color-line); background: #fff;
+  padding: 0.7rem 0.9rem; font-size: 15px; outline: none; transition: border 0.15s, box-shadow 0.15s;
+}
+.field:focus { border-color: var(--color-crust); box-shadow: 0 0 0 4px rgb(255 201 74 / 0.35); }
+.card { background: var(--color-paper); border: 1px solid var(--color-line); border-radius: 22px; box-shadow: var(--shadow-card); }
+}
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.pop { animation: pop 0.35s ease; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.4s ease both; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+.spin-slow { animation: spin-slow 40s linear infinite; }
+.leaflet-container { font-family: var(--font-sans); }
+.pin-icon { background: none; border: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pop, .rise, .spin-slow { animation: none; }
+}

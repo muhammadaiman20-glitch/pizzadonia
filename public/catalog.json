@@ -1,0 +1,228 @@
+{
+  "shopName": "Pizzadonia",
+  "open": false,
+  "offline": true,
+  "whatsapp": "",
+  "minOrder": 0,
+  "shop": null,
+  "delivery": {
+    "baseFee": 3,
+    "baseKm": 3,
+    "perKm": 1,
+    "maxKm": 15,
+    "freeAbove": 0
+  },
+  "menu": [
+    {
+      "available": true,
+      "id": "ayam",
+      "name": "Peperoni Ayam",
+      "desc": "Pepperoni ayam, sos pizza dan keju mozzarella cair yang melimpah.",
+      "price": 21.9,
+      "img": "/pizzas/ayam.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 21.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 25.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "daging",
+      "name": "Peperoni Daging",
+      "desc": "Pepperoni daging berempah, sos pizza dan keju cair yang melimpah.",
+      "price": 21.9,
+      "img": "/pizzas/daging.jpg",
+      "tag": "Paling laris",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 21.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 25.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "isi-ketam",
+      "name": "Isi Ketam",
+      "desc": "Isi ketam, nanas dan keju mozzarella, manis-masin yang seimbang.",
+      "price": 21.9,
+      "img": "/pizzas/isi-ketam.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 21.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 25.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "meatball",
+      "name": "Meatball",
+      "desc": "Bebola daging juicy, lada benggala dan keju yang meleleh.",
+      "price": 25.9,
+      "img": "/pizzas/meatball.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 25.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 31.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "tuna",
+      "name": "Tuna",
+      "desc": "Tuna, jagung manis dan cendawan dengan keju cheddar.",
+      "price": 25.9,
+      "img": "/pizzas/tuna.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 25.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 31.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "mix",
+      "name": "Mix",
+      "desc": "Semua sekali: ayam, daging, isi ketam, cendawan, nanas dan capsicum.",
+      "price": 25.9,
+      "img": "/pizzas/mix.jpg",
+      "tag": "Untuk yang tak boleh pilih",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 25.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 31.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "hawaii-beef",
+      "name": "Hawaii Beef",
+      "desc": "Daging cincang, nanas, capsicum hijau dan merah. Klasik Hawaii.",
+      "price": 25.9,
+      "img": "/pizzas/hawaii-beef.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 25.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 31.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "hawaii-chicken",
+      "name": "Hawaii Chicken",
+      "desc": "Ayam, nanas, capsicum dan sos istimewa di atas keju.",
+      "price": 25.9,
+      "img": "/pizzas/hawaii-chicken.jpg",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 25.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 31.9
+        }
+      ]
+    },
+    {
+      "available": true,
+      "id": "udang",
+      "name": "Udang Solo A",
+      "desc": "Udang besar penuh satu pizza, nanas dan keju. Yang paling premium.",
+      "price": 31.9,
+      "img": "/pizzas/udang.jpg",
+      "tag": "Premium",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 31.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 36.9
+        }
+      ]
+    },
+    {
+      "id": "wagyu",
+      "img": "/logo.svg",
+      "available": true,
+      "tag": "Paling mewah",
+      "desc": "Daging wagyu premium, keju mozzarella dan sos istimewa. Pizza paling mewah kami.",
+      "name": "Wagyu",
+      "sizes": [
+        {
+          "id": "8inci",
+          "label": "8 inci",
+          "price": 71.9
+        },
+        {
+          "id": "10inci",
+          "label": "10 inci",
+          "price": 76.9
+        }
+      ],
+      "price": 71.9
+    }
+  ],
+  "payment": {
+    "cod": true,
+    "transfer": false
+  },
+  "googleClientId": "",
+  "welcome": null,
+  "cashback": null
+}

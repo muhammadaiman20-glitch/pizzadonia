@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/
+*.log
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.wrangler/
+netlify.toml
+.netlify/
+.hermes-project.json
