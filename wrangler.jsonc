@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pizzadonia-backend",
+  "main": "cloudflare/backend.js",
+  "compatibility_date": "2026-10-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "SITE_ORIGIN": "https://pizzadonia.pages.dev"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SHOP",
+        "class_name": "PizzadoniaShop"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "PizzadoniaShop"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "redact_query_string": true
+  },
+  "ai": {
+    "binding": "AI"
+  }
+}

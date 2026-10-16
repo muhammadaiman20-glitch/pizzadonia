@@ -11,3 +11,10 @@ data/
 netlify.toml
 .netlify/
 .hermes-project.json
+
+.wrangler/
+.cloud-build/
+.dev.vars*
+.env*
+worker-configuration.d.ts
+*private*

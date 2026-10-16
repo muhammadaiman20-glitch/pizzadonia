@@ -79,7 +79,7 @@ function Login({ onOk }) {
     }
     setBusy(false)
   }
-  useAutoSubmit(pin, pin.length >= 4, submit)
+  useAutoSubmit(pin, !shop?.cloudHosted && pin.length >= 4, submit)
   return (
     <div className="dots grid min-h-dvh place-items-center px-4">
       <form onSubmit={submit} className="card w-full max-w-sm p-7 text-center">
@@ -89,9 +89,10 @@ function Login({ onOk }) {
           <div className="mt-4">
             <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} text="signin_with" />
             {gErr && <p className="mt-2 text-[13px] font-semibold text-tomato">{gErr}</p>}
-            <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> or PIN (this PC / Tailscale only) <span className="h-px flex-1 bg-line" /></div>
+            {!shop?.cloudHosted && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> or PIN (this PC / Tailscale only) <span className="h-px flex-1 bg-line" /></div>}
           </div>
         )}
+        {shop?.cloudHosted ? <p className="mt-4 text-[13px] text-muted">Sign in with the shop owner’s Google account. Your transaction PIN is required when moving money.</p> : <>
         <p className="mt-1 text-[13px] text-muted">The PIN is in <code>data\ADMIN-PIN.txt</code> in the Pizzadonia folder.</p>
         <input
           className="field mt-5 text-center text-2xl tracking-[0.4em]"
@@ -107,6 +108,7 @@ function Login({ onOk }) {
         <button className="btn btn-red mt-4 w-full py-3" disabled={pin.length < 4 || busy}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Lock className="size-4" />} Open orders
         </button>
+        </>}
       </form>
     </div>
   )

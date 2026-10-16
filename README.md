@@ -1,51 +1,64 @@
 # Pizzadonia
 
-Malay-language pizza ordering application. React 19, Vite 8, Tailwind CSS 4 and Leaflet power the storefront; Express handles business operations on the owner's PC.
+Malay-language pizza ordering app. React/Vite provides the storefront. Cloudflare Pages serves the site; a private Cloudflare Worker runs the business API and a SQLite-backed Durable Object persists the shop’s records and uploads. **No PC, BAT file or tunnel is required for the deployed site.**
 
-## Deployment
+Storefront: https://pizzadonia.pages.dev  
+Seller: https://pizzadonia.pages.dev/#/admin
 
-Production storefront: https://pizzadonia.pages.dev
+## Architecture
 
-Cloudflare Pages serves `dist/`; `cloudflare/worker.js` proxies `/api/*` to the existing backend. Node.js 22.12+ is required. Build with `npm ci && npm run build`.
+- Pages `dist/_worker.js` forwards `/api/*` through the `BACKEND` service binding to `pizzadonia-backend`.
+- `PizzadoniaShop` is the single coordinator for this shop’s order IDs, wallet debits, promo limits and business records. Multiple shops must use separate objects.
+- SQLite storage contains the existing JSON records and private uploads. Files use 256 KiB chunks, avoiding the per-row size limit. This compatibility storage is suitable for this small shop; larger deployments should normalize records and move media to R2.
+- Each command stages changes and commits them atomically. Unexpected failures discard staged changes. Commands are serialized so two concurrent wallet orders cannot overdraw a balance.
+- Seller login uses verified Google ID tokens and an owner-email allowlist. The existing transaction PIN still protects money actions. Public PIN-only seller login is disabled.
+- Customer accounts, kitchen/rider PINs, receipts, bank-in documents, wallet transactions, support chats and the ledger retain their existing API contracts.
+- The support assistant uses Workers AI when no HTTPS AI provider is configured. If AI is unavailable, the existing built-in replies remain available.
+- Optional Telegram notifications require cloud secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_HOME_CHANNEL`. A local Hermes `.env` is not readable from Cloudflare. Notifications use a persistent outbox and retry alarms; delivery is at-least-once, so an interrupted send can produce a duplicate alert. The old Telegram auto-delete feature is not supported by this cloud adapter.
 
-The current Pages project uses Direct Upload. Git-triggered builds are not configured because Cloudflare reported an issue with the account's Git installation. Install Wrangler, authenticate to Cloudflare and use `npm run deploy` for subsequent deployments.
+## Build and verify
 
-Configure these runtime environment variables in Cloudflare Pages for production and preview:
+Use Node 22.12 or newer.
 
-| Variable | Purpose |
-| --- | --- |
-| BACKEND_URL | HTTPS origin of the running PC server's tunnel |
-| BACKEND_PROXY_SECRET | Secret matching proxySecret in the PC's private data/settings.json |
-
-The PC must run `npm start` and its tunnel must remain online. Pages does not execute `server.js` or store its JSON database. Keep the original `data/` folder on the PC and back it up privately. For a fresh checkout, copy that folder locally before starting the server, otherwise default settings are generated.
-
-In the PC's admin settings, set `siteUrl` to the Pages address. Add the Pages origin to the existing Google OAuth client's authorized JavaScript origins before using Google sign-in. PIN-based admin access retains the private-device restriction; public admin access requires the configured owner Google account.
-
-## Offline behavior
-
-When the tunnel is unavailable, customers can view a public menu snapshot and browse a cart. The site labels ordering and sign-in as unavailable; checkout is disabled. API mutations fail with HTTP 503 and do not create simulated orders. The snapshot is not a live inventory feed. When the backend responds again, a page refresh loads the live shop.
-
-## Features found in the supplied project
-
-- Pizza sizes, availability and cart.
-- Delivery map, road-distance fees, COD and bank-transfer orders.
-- Customer PIN / Google accounts, order tracking and receipt uploads.
-- Seller dashboard, kitchen and rider queues.
-- Wallet, cashback, welcome offers, promos and ledger.
-- Support chat and optional Telegram notifications.
-
-## Local development
-
-```
+```sh
 npm ci
+npm run prepare:cloud
+npm run test:cloud
 npm run build
-npm start
+npm run build:backend
 ```
 
-Backend and built UI run on http://127.0.0.1:5400. Run `npm run dev` separately for Vite on port 5401. `PUBLIC=0` disables automatic tunnel startup.
+`server.js` remains the optional local server and the source of shared business rules. `scripts/prepare-cloud.mjs` generates `cloudflare/runtime/app.js`, replacing the local HTTP, persistence and private-network admin adapters. Review that generator when the server layout changes.
 
-## Data and secrets
+The cloud test suite runs the actual Workers runtime and checks ordering, customer login, file uploads, permissions, wallet concurrency, and persistence/rate limits across worker restarts. It uses isolated synthetic data and never creates production orders.
 
-PINs, active sessions, customer records, receipts, wallet records, bank-in proofs, local project metadata and the old Netlify proxy configuration are excluded. Only a public menu snapshot and product photographs are published. Configure secrets on Cloudflare, never in frontend source or VITE_* variables.
+## Deploy
 
-This deployment preparation is not a comprehensive security audit. The original backend's file-based persistence, rate limiting and business logic remain in place.
+Authenticate Wrangler to the intended Cloudflare account. Deploy the backend before Pages:
+
+```sh
+npm run deploy:backend
+npm run deploy:pages
+```
+
+Configure the Pages project's production and preview service binding:
+
+```text
+BACKEND -> pizzadonia-backend (production)
+```
+
+Remove the obsolete `BACKEND_URL` and `BACKEND_PROXY_SECRET` variables. Keep `workers_dev` and preview URLs disabled on the private backend. Pages uses Direct Upload; automatic GitHub builds are not configured. Pushing code alone does not publish it.
+
+Google OAuth must allow `https://pizzadonia.pages.dev` as an authorized JavaScript origin. Only addresses listed in the private shop settings may access the seller dashboard. Never remove the owner Google configuration without preparing another recovery path.
+
+## Initial data migration and recovery
+
+The backend returns 503 until a private snapshot is finalized. A temporary `IMPORT_KEY` secret protects `POST /_migration/import`. Its JSON body contains `files: [{path, data}]`, with relative file paths and base64 content; `finalize: true` validates owner sign-in settings and closes the import permanently. Later imports receive 409. Remove the import secret after migration and keep the backend private.
+
+Private files, PINs, customer records, sessions and tokens must never be committed. Owner-authenticated `GET /api/admin/cloud-backup` exports a complete private snapshot; keep that export secure. SQLite point-in-time recovery is also available through Cloudflare. Keep the original PC data backup until migration has been verified.
+
+Health: `GET /api/health` reports cloud storage readiness and `pcRequired: false`.
+
+## Optional local use
+
+`Start Pizzadonia.bat` and `npm start` only start a separate local instance. Its `data/` folder does not synchronize with the cloud shop. Do not run the old public PC tunnel as another ordering endpoint after migration.

@@ -7,8 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "start": "node server.js",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name pizzadonia",
-    "postbuild": "node scripts/prepare-pages.mjs"
+    "deploy": "npm run deploy:backend && npm run deploy:pages",
+    "postbuild": "node scripts/prepare-pages.mjs",
+    "prepare:cloud": "node scripts/prepare-cloud.mjs",
+    "test:cloud": "node --test tests/cloud.test.mjs",
+    "build:backend": "npm run prepare:cloud && wrangler deploy --dry-run --outdir .cloud-build",
+    "deploy:backend": "npm run prepare:cloud && wrangler deploy --keep-vars",
+    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name pizzadonia"
   },
   "dependencies": {
     "express": "^5.2.1",
@@ -20,8 +25,11 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261012.0-beta",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.2"
+    "vite": "^8.3.2",
+    "wrangler": "4.151.0"
   },
   "engines": {
     "node": ">=22.12.0"
