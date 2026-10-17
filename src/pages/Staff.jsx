@@ -5,7 +5,7 @@ import { BankForm, TxList } from './Wallet.jsx'
 import { withTxPin } from '../components/PinPrompt.jsx'
 import Logo from '../components/Logo.jsx'
 import OrderMap from '../components/OrderMap.jsx'
-import { rm, useAutoSubmit, waLink } from '../lib.js'
+import { autoRefresh, rm, useAutoSubmit, waLink } from '../lib.js'
 
 // One page, two jobs. role = 'kitchen' (the pizza supplier) or 'rider'. Each logs in with its own PIN.
 const ROLE = {
@@ -617,9 +617,7 @@ export default function Staff({ role }) {
     }
   }, [pin, role, R, logout])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 8000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
 
   if (!pin) return <Login role={role} onOk={setPin} />

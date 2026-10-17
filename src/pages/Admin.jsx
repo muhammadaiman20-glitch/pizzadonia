@@ -6,7 +6,7 @@ import OrderMap from '../components/OrderMap.jsx'
 import { STEPS, nextStep, stepIndex, stepOf } from '../status.js'
 import { PAY_STATUS, shrink } from '../components/PaymentPanel.jsx'
 import { TX } from './Wallet.jsx'
-import { adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
+import { autoRefresh, adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
 import { withTxPin } from '../components/PinPrompt.jsx'
 
@@ -506,9 +506,7 @@ function Orders({ pin, onAuthFail }) {
     }
   }, [pin, onAuthFail])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 8000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   if (!orders) return <div className="grid place-items-center py-20"><Loader2 className="size-7 animate-spin text-tomato" /></div>
   const today = new Date().toDateString()
@@ -611,9 +609,7 @@ function Customers({ pin }) {
   const [busy, setBusy] = useState('')
   const load = useCallback(() => api('/api/admin/customers', { pin }).then((r) => setList(r.customers)).catch(() => {}), [pin])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 20000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   const act = async (c, action, extra = {}) => {
     setBusy(c.phone + action)
@@ -754,9 +750,7 @@ function Support({ pin }) {
   const box = useRef(null)
   const load = useCallback(() => api('/api/admin/support', { pin }).then((r) => setChats(r.chats)).catch(() => {}), [pin])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 5000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   const c = chats?.find((x) => x.id === sel)
   useEffect(() => {
@@ -1003,9 +997,7 @@ function BusinessAccount({ pin }) {
   const [period, setPeriod] = useState('month')
   const load = useCallback(() => api('/api/admin/ledger', { pin }).then(setD).catch(() => {}), [pin])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 20000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   if (!d) return <div className="grid place-items-center py-20"><Loader2 className="size-7 animate-spin text-tomato" /></div>
   const today = myDate(new Date().toISOString())
@@ -1290,9 +1282,7 @@ function Wallets({ pin }) {
   const [busy, setBusy] = useState('')
   const load = useCallback(() => api('/api/admin/wallets', { pin }).then(setD).catch(() => {}), [pin])
   useEffect(() => {
-    load()
-    const t = setInterval(load, 10000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   const run = async (id, fn) => {
     setBusy(id)
@@ -1472,9 +1462,7 @@ function Money({ pin }) {
     setBi(b.bankins)
   }, [days, pin])
   useEffect(() => {
-    load().catch(() => {})
-    const t = setInterval(() => load().catch(() => {}), 15000)
-    return () => clearInterval(t)
+    return autoRefresh(load, 5000)
   }, [load])
   const act = async (id, action) => {
     let reason

@@ -62,3 +62,7 @@ Health: `GET /api/health` reports cloud storage readiness and `pcRequired: false
 ## Optional local use
 
 `Start Pizzadonia.bat` and `npm start` only start a separate local instance. Its `data/` folder does not synchronize with the cloud shop. Do not run the old public PC tunnel as another ordering endpoint after migration.
+
+## Automatic data sync
+
+Visible, online pages refresh shared shop, customer, order, wallet and staff data every five seconds. Focus, reconnect and successful API changes trigger an immediate refresh. Support chat polls every five seconds while open, or twenty seconds while closed. Hidden/offline pages pause polling and refresh when resumed. Temporary network errors retain the last data and customer session. Use the same customer account on each device to see that account’s records. Shopping carts remain device-local; local source folders and PC data files are not synchronized by this feature. Unsaved seller setting forms are not overwritten in the background; reopen the settings screen to load another device’s changes into its editor.

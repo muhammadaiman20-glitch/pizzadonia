@@ -4,7 +4,7 @@ import { Header } from './Shop.jsx'
 import OrderMap from '../components/OrderMap.jsx'
 import PaymentPanel from '../components/PaymentPanel.jsx'
 import { StatusChip } from './Account.jsx'
-import { api, rm, useAccount, waLink } from '../lib.js'
+import { autoRefresh, api, rm, useAccount, waLink } from '../lib.js'
 import { STEPS, stepIndex, stepOf } from '../status.js'
 
 // transfer orders are paid up front: no "have cash ready" wording for them
@@ -21,9 +21,8 @@ export default function OrderStatus({ id, token }) {
       api(`/api/orders/${encodeURIComponent(id)}?t=${encodeURIComponent(token)}`)
         .then((r) => !stop && (setO(r), setErr('')))
         .catch((e) => !stop && setErr(e.message))
-    load()
-    const t = setInterval(load, 10000)
-    return () => ((stop = true), clearInterval(t))
+    const stopSync = autoRefresh(load, 5000)
+    return () => { stop = true; stopSync() }
   }, [id, token])
 
   if (err && !o)

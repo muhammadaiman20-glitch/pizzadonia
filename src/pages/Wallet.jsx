@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Clock, FileUp, Gift, Landmark, Loader2, RotateCcw, Sparkles, Wallet as WalletIcon } from 'lucide-react'
 import { Header } from './Shop.jsx'
-import { api, rm, useAccount } from '../lib.js'
+import { autoRefresh, api, rm, useAccount } from '../lib.js'
 import { BANKS, guessBank } from '../banks.js'
 import { shrink } from '../components/PaymentPanel.jsx'
 import { withTxPin } from '../components/PinPrompt.jsx'
@@ -236,9 +236,8 @@ export default function Wallet() {
     if (!acc) return
     let stop = false
     const load = () => api('/api/wallet').then((x) => !stop && setD(x)).catch((e) => !stop && setErr(e.message))
-    load()
-    const t = setInterval(load, 15000)
-    return () => ((stop = true), clearInterval(t))
+    const stopSync = autoRefresh(load, 5000)
+    return () => { stop = true; stopSync() }
   }, [acc])
   const activate = async (form) => {
     setBusy(true)

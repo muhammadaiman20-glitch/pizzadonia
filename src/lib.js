@@ -1,3 +1,5 @@
+import { autoRefresh } from './sync.js'
+export { autoRefresh } from './sync.js'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 // owner credential: a PIN ("0000") or a Google owner session ("g:<token>")
@@ -16,9 +18,10 @@ export async function api(path, { method = 'GET', body, pin, txPin } = {}) {
   if (pin) Object.assign(headers, adminHeaders(pin))
   const session = store.get('pz.session', null)
   if (session && !pin) headers.Authorization = `Bearer ${session}`
-  const r = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  const r = await fetch(path, { method, headers, cache: 'no-store', body: body === undefined ? undefined : JSON.stringify(body) })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw Object.assign(new Error(j.error || j.reason || `Ralat ${r.status}`), { status: r.status })
+  if (!['GET', 'HEAD'].includes(method.toUpperCase())) window.dispatchEvent(new Event('pz:data-changed'))
   return j
 }
 
@@ -78,18 +81,37 @@ export function cartLines(c, menu) {
     .filter(Boolean)
 }
 
-// ---- shop info (menu, fees, open) loaded once and shared
-let shopCache = null
+// ---- live shop data, shared by all mounted consumers (one poller per tab)
+let shopState = { shop: null, error: null }
 let shopPromise = null
+let stopShopSync
+const shopSubs = new Set()
+async function refreshShop() {
+  if (shopPromise) return shopPromise
+  shopPromise = (async () => {
+    try {
+      const shop = await api('/api/shop')
+      if (JSON.stringify(shop) !== JSON.stringify(shopState.shop) || shopState.error) {
+        shopState = { shop, error: null }
+        shopSubs.forEach(f => f())
+      }
+    } catch (e) {
+      shopState = { ...shopState, error: e.message }
+      shopSubs.forEach(f => f())
+    } finally { shopPromise = null }
+  })()
+  return shopPromise
+}
+function subscribeShop(f) {
+  shopSubs.add(f)
+  if (!stopShopSync) stopShopSync = autoRefresh(refreshShop, 5000)
+  return () => {
+    shopSubs.delete(f)
+    if (!shopSubs.size) { stopShopSync?.(); stopShopSync = null }
+  }
+}
 export function useShop() {
-  const [shop, setShop] = useState(shopCache)
-  const [error, setError] = useState(null)
-  useEffect(() => {
-    if (shopCache) return
-    shopPromise ??= api('/api/shop')
-    shopPromise.then((s) => (shopCache = s, setShop(s))).catch((e) => (shopPromise = null, setError(e.message)))
-  }, [])
-  return { shop, error }
+  return useSyncExternalStore(subscribeShop, () => shopState)
 }
 
 // ---- tiny hash router: #/  #/checkout  #/order/PZ-0001?t=..  #/admin
@@ -137,13 +159,25 @@ const accSubs = new Set()
 const setAccount = (a) => ((account = a), accSubs.forEach((f) => f()))
 export const accountApi = {
   async refresh() {
-    if (!store.get('pz.session', null)) return setAccount(null)
-    try {
-      setAccount(await api('/api/account'))
-    } catch (e) {
-      if (e.status === 401) store.set('pz.session', null)
-      setAccount(null)
-    }
+    const session = store.get('pz.session', null)
+    if (!session) return setAccount(null)
+    if (accountRequest?.session === session) return accountRequest.promise
+    const promise = (async () => {
+      try {
+        const fresh = await api('/api/account')
+        if (store.get('pz.session', null) === session && JSON.stringify(account) !== JSON.stringify(fresh)) setAccount(fresh)
+      } catch (e) {
+        // A temporary network failure must not sign out the customer or clear their orders.
+        if (e.status === 401 && store.get('pz.session', null) === session) {
+          store.set('pz.session', null)
+          setAccount(null)
+        }
+      } finally {
+        if (accountRequest?.session === session) accountRequest = null
+      }
+    })()
+    accountRequest = { session, promise }
+    return promise
   },
   async login(phone, pin) {
     const r = await api('/api/account/login', { method: 'POST', body: { phone, pin } })
@@ -170,16 +204,27 @@ export const accountApi = {
     setAccount(r)
   },
 }
-let accLoaded = false
-export function useAccount() {
-  const a = useSyncExternalStore((f) => (accSubs.add(f), () => accSubs.delete(f)), () => account)
-  useEffect(() => {
-    if (!accLoaded) {
-      accLoaded = true
-      accountApi.refresh()
+let stopAccountSync
+let accountRequest = null
+function subscribeAccount(f) {
+  accSubs.add(f)
+  if (!stopAccountSync) {
+    stopAccountSync = autoRefresh(() => accountApi.refresh(), 5000)
+    window.addEventListener('storage', sessionChanged)
+  }
+  return () => {
+    accSubs.delete(f)
+    if (!accSubs.size) {
+      stopAccountSync?.(); stopAccountSync = null
+      window.removeEventListener('storage', sessionChanged)
     }
-  }, [])
-  return a
+  }
+}
+function sessionChanged(event) {
+  if (event.key === 'pz.session' || event.key === null) void accountApi.refresh()
+}
+export function useAccount() {
+  return useSyncExternalStore(subscribeAccount, () => account)
 }
 export const prettyPhone = (p) => (p ? '0' + String(p).replace(/^60/, '').replace(/^(\d{2})(\d{3,4})(\d{4})$/, '$1-$2 $3') : '')
 

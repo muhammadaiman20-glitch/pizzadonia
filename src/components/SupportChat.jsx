@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bot, Headset, Loader2, MessageCircle, Send, Store, X } from 'lucide-react'
-import { api, store, useAccount } from '../lib.js'
+import { autoRefresh, api, store, useAccount } from '../lib.js'
 
 // Floating support chat on customer pages. The shop assistant answers first; "Hubungi penjual" hands the chat
 // to the seller, whose replies arrive here too (polled). The chat id + token live in localStorage.
@@ -49,9 +49,7 @@ export default function SupportChat() {
     }
   }, [sess])
   useEffect(() => {
-    load(open)
-    const t = setInterval(() => load(open), open ? 5000 : 20000)
-    return () => clearInterval(t)
+    return autoRefresh(() => load(open), open ? 5000 : 20000)
   }, [load, open])
   useEffect(() => {
     const n = chat?.messages?.length || 0
