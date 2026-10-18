@@ -7,6 +7,13 @@ export const adminHeaders = (cred) => (String(cred).startsWith('g:') ? { 'x-admi
 export const ownerSession = {
   get: () => store.get('pz.adminSession', null),
   set: (t) => store.set('pz.adminSession', t || null),
+  // a shared phone or PC: whoever signs in next must not inherit the owner's seller session. Revoked on the server too.
+  end() {
+    const t = store.get('pz.adminSession', null)
+    if (!t) return
+    store.set('pz.adminSession', null)
+    fetch('/api/admin/logout', { method: 'POST', headers: { 'x-admin-session': t, 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
+  },
 }
 
 export const rm = (v) => 'RM' + (Number(v) || 0).toFixed(2)
@@ -156,7 +163,11 @@ export const waLink = (phone, text) => `https://wa.me/${phone}?text=${encodeURIC
 // ---- customer account (phone + PIN). The session token lives in localStorage; the account data is shared.
 let account = store.get('pz.session', null) ? undefined : null // undefined = still loading
 const accSubs = new Set()
-const setAccount = (a) => ((account = a), accSubs.forEach((f) => f()))
+const setAccount = (a) => {
+  if (a && !a.owner) ownerSession.end() // signed in as anyone but the owner's Gmail: no seller access on this device
+  account = a
+  accSubs.forEach((f) => f())
+}
 export const accountApi = {
   async refresh() {
     const session = store.get('pz.session', null)
@@ -193,6 +204,7 @@ export const accountApi = {
   },
   async logout() {
     await api('/api/account/logout', { method: 'POST', body: {} }).catch(() => {})
+    ownerSession.end()
     store.set('pz.session', null)
     setAccount(null)
   },

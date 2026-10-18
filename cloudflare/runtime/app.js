@@ -416,6 +416,7 @@ function accountOf(req) {
 const accountView = (phone, acc) => ({
   phone, name: acc.name, addresses: acc.addresses || [], hasPin: Boolean(acc.pin),
   google: acc.google ? { email: acc.google.email, picture: acc.google.picture } : null,
+  owner: isAdminEmail(acc.google?.email), // the shop owner's Gmail: the only account that may see the seller link
   orders: orders.filter((o) => o.accountPhone === phone).slice(-50).reverse().map(publicOrder),
 })
 function rememberAddress(acc, loc) {

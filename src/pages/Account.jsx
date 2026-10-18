@@ -155,7 +155,6 @@ function AuthForm() {
           </button>
         </form>
         {mode === 'login' && <p className="mt-3 text-center text-[12.5px] text-muted">Lupa PIN? WhatsApp kedai dan kami akan bantu.</p>}
-        <p className="mt-2 text-center text-[12px] text-muted">Pemilik kedai? <a href="#/admin" className="font-bold underline">Dashboard admin</a></p>
       </div>
     </div>
   )
@@ -197,7 +196,7 @@ export default function Account() {
             <button className="btn btn-ghost px-4 py-2 text-[13px]" onClick={() => accountApi.logout()}><LogOut className="size-4" /> Log keluar</button>
           </div>
 
-          {ownerSession.get() && (
+          {acc.owner && ownerSession.get() && (
             <a href="#/admin" className="mt-6 flex items-center gap-4 rounded-[22px] bg-ink p-5 text-white transition hover:-translate-y-0.5">
               <UserRound className="size-8 text-cheese" />
               <div className="flex-1">

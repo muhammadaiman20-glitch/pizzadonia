@@ -161,6 +161,12 @@ await test('Telegram AI helper: reads, plans, confirm, cancel, owner-only, once 
     const sessions = JSON.parse(Buffer.from(backup.files.find((f) => f.path.endsWith('admin-sessions.json')).data, 'base64').toString())
     assert.deepEqual(Object.keys(sessions), [session])
 
+    // a customer account is never flagged as the owner, so the shop hides the seller link from it
+    const cust = await call('/api/account/register', { method: 'POST', owner: false, body: { name: 'Pelanggan Baru', phone: '0198765432', pin: '445566' } })
+    assert.equal(cust.status, 200, JSON.stringify(cust.data))
+    assert.equal(cust.data.owner, false)
+    assert.equal((await call('/api/account', { owner: false, headers: { authorization: 'Bearer ' + cust.data.token } })).data.owner, false)
+
     // switched off -> plain status reply, no model
     await call('/api/admin/settings', { method: 'PUT', body: { opsAi: { enabled: false, model: '@cf/evil/model' } } })
     assert.equal((await call('/api/admin/settings')).data.opsAi.model, '@cf/zai-org/glm-5.3-flash')

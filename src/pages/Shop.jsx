@@ -17,7 +17,7 @@ export function Header({ onCart, count }) {
               <span className={`size-2 rounded-full ${shop.open ? 'bg-basil' : 'bg-tomato'}`} /> {shop.open ? 'Dibuka sekarang' : 'Tutup'}
             </span>
           )}
-          {ownerSession.get() && (
+          {ownerSession.get() && (!acc || acc.owner) && (
             <a href="#/admin" className="btn bg-ink px-3 py-2 text-[13px] text-white" aria-label="Seller page"><Store className="size-4" /> <span className="hidden sm:inline">Seller</span></a>
           )}
           <a href="#/akaun" className="btn btn-ghost px-3 py-2 text-[14px]" aria-label={acc ? `Akaun ${acc.name}` : 'Log masuk'}>
