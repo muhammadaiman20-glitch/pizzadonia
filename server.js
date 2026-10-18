@@ -6,7 +6,8 @@ import { createSupport } from './support.js'
 import { createLedger } from './ledger.js'
 import { tgDelivery, tgSend } from './telegram.js'
 import { AI_MODELS, aiModel } from './workers-ai.js'
-import { COMMANDS, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from './telegram-bot.js'
+import { COMMANDS, HOOK_UPDATES, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from './telegram-bot.js'
+import { DEFAULT_OPS_MODEL, PLAN_TTL, healthText, opsModel } from './ops-assistant.js'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -76,6 +77,8 @@ const SETTINGS_SEED = {
   cashback: { active: false, percent: 10, start: '', end: '', minOrder: 0, maxPerOrder: 0, exclude: [] }, // exclude = product ids with no cashback
   // support chat AI: Cloudflare Workers AI (cloud only). Plain chat, no tools; off = built-in replies only.
   aiChat: { enabled: true, model: AI_MODELS[0].id },
+  // owner's AI helper in the Telegram bot (ops-assistant.js): reads the shop, changes it only after the owner confirms
+  opsAi: { enabled: true, model: DEFAULT_OPS_MODEL },
   // Telegram heads-ups to the owner: payments, new orders, support chats. Pizzadonia's own bot (token pasted on the
   // dashboard, chat linked by /start <code>).
   telegram: { enabled: true, payments: true, orders: true, support: true,
@@ -92,6 +95,7 @@ settings.welcome = { ...SETTINGS_SEED.welcome, ...settings.welcome }
 // older shops stored another AI provider here; only the on/off switch carries over
 settings.aiChat = { enabled: settings.aiChat?.enabled !== false, model: aiModel(settings.aiChat?.model) }
 settings.telegram = { ...SETTINGS_SEED.telegram, ...settings.telegram }
+settings.opsAi = { enabled: settings.opsAi?.enabled !== false, model: opsModel(settings.opsAi?.model) }
 // fire-and-forget Telegram message for one kind of event (payments | orders | support)
 // which bot + chat alerts go to ('' chat until the owner taps Start - then nothing is sent)
 function tgCreds() {
@@ -1502,6 +1506,10 @@ app.put('/api/admin/settings', admin, (req, res) => {
     const a = b.aiChat || {}
     next.aiChat = { enabled: a.enabled === undefined ? settings.aiChat.enabled : Boolean(a.enabled), model: aiModel(a.model ?? settings.aiChat.model) }
   }
+  if (b.opsAi !== undefined) {
+    const a = b.opsAi || {}
+    next.opsAi = { enabled: a.enabled === undefined ? settings.opsAi.enabled : Boolean(a.enabled), model: opsModel(a.model ?? settings.opsAi.model) }
+  }
   if (b.adminEmails !== undefined) {
     const list = [...new Set((Array.isArray(b.adminEmails) ? b.adminEmails : String(b.adminEmails).split(/[\s,]+/))
       .map((e) => String(e).trim().toLowerCase()).filter(Boolean))]
@@ -1665,8 +1673,38 @@ function ownerStatusText() {
     ...(receipts ? [`🧾 Resit perlu disemak: ${receipts}`] : []),
   ].join('\n')
 }
+// ---- owner's AI helper (ops-assistant.js). The webhook mints a 5-minute owner session for the bot and hands the
+// turn to deferOps; the helper then works only through the seller API with that session and never has the
+// transaction PIN. Telegram may re-send a slow webhook, so each update runs once (seen ids).
+// Needs Workers AI: this local copy only says where it runs; prepare-cloud swaps in the Cloudflare runner.
+const deferOps = (job) => tgApi(job.token, 'sendMessage', { chat_id: job.chatId, text: '🤖 Pembantu AI hanya berjalan pada kedai Cloudflare. Hantar /check untuk semakan kedai.' })
+const OPS_SESSION = 5 * 60 * 1000
+const opsState = () => load('ops-assistant.json', { history: [], pending: null, seen: [] })
+function firstTime(updateId) {
+  const s2 = opsState()
+  if (s2.seen.includes(updateId)) return false
+  s2.seen = [...s2.seen, updateId].slice(-50)
+  save('ops-assistant.json', s2)
+  return true
+}
+function startOps(job) {
+  const token = crypto.randomBytes(24).toString('hex')
+  const now = Date.now()
+  for (const [k, v] of Object.entries(adminSessions)) if (v.exp < now) delete adminSessions[k]
+  adminSessions[token] = { email: settings.adminEmails[0], exp: now + OPS_SESSION, via: 'telegram' }
+  saveAdminSessions()
+  return deferOps({ ...job, token: settings.telegram.botToken, session: token })
+}
 async function onTelegramUpdate(u) {
   const t = settings.telegram
+  // Confirm / Cancel under a change plan: only the linked owner's taps count
+  const q = u.callback_query
+  if (q) {
+    const plan = /^ops:([yn]):(\w{1,16})$/.exec(q.data || '')
+    const owner = Boolean(t.chatId) && q.message?.chat?.type === 'private' && String(q.message.chat.id) === t.chatId && String(q.from?.id) === t.chatId
+    if (!plan || !owner || !settings.adminEmails.length || !firstTime(u.update_id)) return tgApi(t.botToken, 'answerCallbackQuery', { callback_query_id: q.id })
+    return startOps({ chatId: t.chatId, plan: plan[2], yes: plan[1] === 'y', messageId: q.message.message_id, callbackId: q.id })
+  }
   // the owner blocked / unblocked the bot -> shown on the dashboard instead of silent failures
   const mcm = u.my_chat_member
   if (mcm) {
@@ -1701,7 +1739,17 @@ async function onTelegramUpdate(u) {
       save('settings.json', settings)
       return reply('🔕 Notifikasi dihentikan. Sambung semula dari dashboard seller bila-bila masa.')
     }
-    return reply(ownerStatusText(), ownerKeyboard(site))
+    if (c?.cmd === 'check') return reply(healthText(await diagnostics()))
+    if (c?.cmd === 'reset') {
+      save('ops-assistant.json', { ...opsState(), history: [], pending: null })
+      return reply('🧹 Perbualan dengan pembantu AI dikosongkan. Tanya apa sahaja tentang kedai.')
+    }
+    // plain words (not a command) go to the AI helper
+    if (!c && m.text && settings.opsAi.enabled && settings.adminEmails.length) {
+      if (!firstTime(u.update_id)) return
+      return startOps({ chatId: t.chatId, text: String(m.text).slice(0, 2000) })
+    }
+    return reply(ownerStatusText() + (settings.opsAi.enabled ? '\n\n🤖 Tanya saya apa sahaja dalam ayat biasa, cth: "kenapa notifikasi tak masuk?" atau "tutup kedai".' : ''), ownerKeyboard(site))
   }
   // anyone else who finds the bot: point them to the shop
   return reply(`🍕 ${settings.shopName}\nBot ini menghantar notifikasi kepada pemilik kedai. Untuk membuat pesanan, tekan butang di bawah.`,
@@ -1729,14 +1777,28 @@ app.get('/api/admin/telegram', admin, async (req, res) => {
     delivery: tgDelivery(), site, siteOk: /^https:\/\//.test(site),
   }
   if (req.query.live === '1' && c.token) {
-    const w = await tgApi(c.token, 'getWebhookInfo', {}, 6000)
-    out.reachable = w.ok
-    out.error = w.ok ? '' : w.error
-    if (w.ok) out.webhook = { ok: w.result.url === site + WEBHOOK_PATH, pending: w.result.pending_update_count || 0,
-      lastError: w.result.last_error_message || '', lastErrorAt: w.result.last_error_date ? w.result.last_error_date * 1000 : 0 }
+    const w = await webhookCheck()
+    out.reachable = w.reachable
+    out.error = w.error
+    if (w.reachable) out.webhook = { ok: w.ok, pending: w.pending, lastError: w.lastError, lastErrorAt: w.lastErrorAt }
   }
   res.json(out)
 })
+// asks Telegram where the bot's webhook points. A webhook made before the Confirm buttons existed does not deliver
+// button taps: re-register it in place (same address and secret). A different address is left alone - another
+// program owns it, and the owner must choose.
+async function webhookCheck() {
+  const t = settings.telegram
+  const want = siteBase() + WEBHOOK_PATH
+  const w = await tgApi(t.botToken, 'getWebhookInfo', {}, 6000)
+  if (!w.ok) return { reachable: false, error: w.error }
+  const r = w.result
+  let fixed = false
+  if (r.url === want && r.allowed_updates && !HOOK_UPDATES.every((x) => r.allowed_updates.includes(x)))
+    fixed = (await tgApi(t.botToken, 'setWebhook', { url: want, secret_token: t.webhookSecret, allowed_updates: HOOK_UPDATES }, 6000)).ok
+  return { reachable: true, error: '', ok: r.url === want, url: r.url || '', fixed, pending: r.pending_update_count || 0,
+    lastError: r.last_error_message || '', lastErrorAt: r.last_error_date ? r.last_error_date * 1000 : 0 }
+}
 // paste / replace the bot token: checks it with Telegram, points the bot's webhook at this shop
 app.post('/api/admin/telegram/bot', admin, adminTx, async (req, res) => {
   const token = String(req.body?.token || '').trim()
@@ -1746,7 +1808,7 @@ app.post('/api/admin/telegram/bot', admin, adminTx, async (req, res) => {
   const me = await tgApi(token, 'getMe')
   if (!me.ok) return res.status(400).json({ error: me.code === 401 || me.code === 404 ? 'Telegram says this token is wrong or was revoked.' : `Telegram: ${me.error}` })
   const secret = crypto.randomBytes(24).toString('base64url')
-  const hook = await tgApi(token, 'setWebhook', { url: site + WEBHOOK_PATH, secret_token: secret, allowed_updates: ['message', 'my_chat_member'], drop_pending_updates: true })
+  const hook = await tgApi(token, 'setWebhook', { url: site + WEBHOOK_PATH, secret_token: secret, allowed_updates: HOOK_UPDATES, drop_pending_updates: true })
   if (!hook.ok) return res.status(502).json({ error: `Telegram refused the webhook: ${hook.error}` })
   await tgApi(token, 'setMyCommands', { commands: COMMANDS })
   const t = settings.telegram
@@ -1786,6 +1848,70 @@ app.post('/api/admin/telegram-test', admin, async (_req, res) => {
   const r = await tgSend(`🍕 ${settings.shopName}: notifikasi Telegram berfungsi! Anda akan dapat mesej bila pelanggan buat pesanan atau bayaran.`, null, undefined, ownerKeyboard(siteBase()), c)
   res.status(r.ok ? 200 : 502).json(r)
 })
+
+// health checks for /check and the AI helper's check_health tool. level: error = customers or alerts are affected,
+// warn = needs attention, ok = fine.
+async function diagnostics() {
+  const out = []
+  const add = (level, area, text) => out.push({ level, area, text })
+  add(settings.open ? 'ok' : 'warn', 'Kedai', settings.open ? 'Dibuka, menerima pesanan' : 'TUTUP - pelanggan tidak boleh order')
+  if (!settings.shop) add('error', 'Lokasi kedai', 'Belum ditetapkan - caj penghantaran tidak boleh dikira, checkout gagal')
+  const selling = menu.filter((m) => m.available && !m.pendingPrice)
+  add(selling.length ? 'ok' : 'error', 'Menu', `${selling.length}/${menu.length} produk boleh dijual`)
+  const noPrice = menu.filter((m) => m.pendingPrice)
+  if (noPrice.length) add('warn', 'Menu', `Dapur tambah produk tanpa harga jualan: ${noPrice.map((m) => m.name).join(', ')}`)
+  const p = settings.payment
+  if (p.transfer && !p.qr && !p.accountNumber) add('warn', 'Bayaran', 'Pindahan bank hidup tetapi tiada QR atau nombor akaun')
+  const off = [!settings.staff.kitchenPin && 'dapur', !settings.staff.riderPin && 'rider'].filter(Boolean)
+  if (off.length) add('warn', 'Staf', `Halaman ${off.join(' & ')} dimatikan (tiada PIN)`)
+  const now = Date.now()
+  const stuck = orders.filter((o) => !['done', 'cancelled'].includes(o.status) && now - new Date(o.history?.at(-1)?.at || o.createdAt).getTime() > 3 * 3600 * 1000)
+  if (stuck.length) add('warn', 'Pesanan', `Tidak bergerak lebih 3 jam: ${stuck.slice(0, 8).map((o) => `${o.id} (${o.status})`).join(', ')}`)
+  const receipts = orders.filter((o) => o.payment?.status === 'pending').length
+  if (receipts) add('warn', 'Resit', `${receipts} resit pindahan menunggu semakan`)
+  const bankinWait = bankins.filter((b) => b.status === 'pending').length
+  if (bankinWait) add('warn', 'Bank-in rider', `${bankinWait} bank-in menunggu pengesahan`)
+  const walletWait = Object.values(wallets.accounts).filter((w) => w.status === 'pending').length + wallets.tx.filter((x) => x.status === 'pending').length
+  if (walletWait) add('warn', 'Dompet', `${walletWait} permohonan dompet menunggu kelulusan`)
+  const waiting = load('support.json', []).filter((x) => x.status === 'waiting').length
+  if (waiting) add('warn', 'Chat pelanggan', `${waiting} pelanggan menunggu balasan anda`)
+  if (!settings.googleClientId) add('warn', 'Log masuk seller', 'Google sign-in belum ditetapkan')
+  if (settings.aiChat.enabled && !aiGenerate) add('warn', 'AI chat pelanggan', 'Workers AI tiada di sini (server tempatan) - balasan terbina dalam sahaja')
+  else add('ok', 'AI chat pelanggan', settings.aiChat.enabled ? 'Hidup' : 'Mati - balasan terbina dalam sahaja')
+  const t = settings.telegram
+  const c = tgCreds()
+  if (c.mode === 'off') add('warn', 'Telegram', 'Bot belum ditambah')
+  else {
+    if (!c.chat) add('warn', 'Telegram', 'Bot ada tetapi chat pemilik belum disambung')
+    if (t.blockedAt) add('error', 'Telegram', 'Bot disekat dalam Telegram - buka bot dan tekan Restart/Unblock')
+    if (!t.enabled) add('warn', 'Telegram', 'Semua notifikasi dimatikan dalam tetapan')
+    const d = tgDelivery()
+    if (d.ok === false) add('error', 'Notifikasi', `Hantaran terakhir gagal: ${d.error}`)
+    if (d.queued > 3) add('warn', 'Notifikasi', `${d.queued} mesej masih dalam barisan`)
+    const w = await webhookCheck()
+    if (!w.reachable) add('error', 'Webhook', `Telegram tidak dapat dihubungi: ${w.error}`)
+    else if (!w.ok) add('error', 'Webhook', `Bot menghala ke ${w.url || 'tiada alamat'}, bukan kedai ini. Tampal semula token bot di dashboard.`)
+    else if (w.lastError && now - w.lastErrorAt < 3600 * 1000) add('warn', 'Webhook', `Ralat dalam sejam lepas: ${w.lastError}`)
+    else add('ok', 'Webhook', w.fixed ? 'OK (butang Sahkan dibaiki sekarang)' : 'OK')
+  }
+  return out
+}
+// the AI helper's memory: last messages + at most one change plan waiting for Confirm
+app.get('/api/admin/ops/state', admin, (_req, res) => {
+  const { history, pending } = opsState()
+  res.json({ history, pending, model: settings.opsAi.model, shopName: settings.shopName, today: myDay() })
+})
+app.put('/api/admin/ops/state', admin, (req, res) => {
+  const b = req.body || {}
+  const s2 = opsState()
+  if (b.history !== undefined) s2.history = (Array.isArray(b.history) ? b.history : []).filter((x) => ['user', 'assistant'].includes(x?.role)).slice(-16)
+    .map((x) => ({ role: x.role, content: String(x.content || '').slice(0, 3000) }))
+  if (b.pending !== undefined) s2.pending = b.pending && Array.isArray(b.pending.calls)
+    ? { id: String(b.pending.id).slice(0, 16), calls: b.pending.calls.slice(0, 10).map((x) => ({ name: String(x?.name), args: x?.args || {} })), exp: Math.min(+b.pending.exp || 0, Date.now() + PLAN_TTL) } : null
+  save('ops-assistant.json', s2)
+  res.json({ ok: true })
+})
+app.get('/api/admin/ops/diagnostics', admin, async (_req, res) => res.json({ checks: await diagnostics(), at: new Date().toISOString() }))
 
 // ---- end of shared business rules (scripts/prepare-cloud.mjs copies everything above into the cloud backend)
 

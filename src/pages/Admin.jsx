@@ -9,6 +9,7 @@ import { TX } from './Wallet.jsx'
 import { autoRefresh, adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
+import { DEFAULT_OPS_MODEL, OPS_MODELS } from '../../ops-assistant.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
 import { TelegramChip, TelegramSettings, useTelegramStatus } from '../components/TelegramConnect.jsx'
 
@@ -909,6 +910,42 @@ function AiChatSettings({ s, setS, pin }) {
   )
 }
 
+// the owner's AI helper inside the shop's Telegram bot (ops-assistant.js)
+function OpsAiSettings({ s, setS }) {
+  const a = s.opsAi || {}
+  const set = (k, v) => setS({ ...s, opsAi: { ...a, [k]: v } })
+  return (
+    <section className="card space-y-4 p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-2 font-display text-2xl tracking-wide"><Send className="size-5 text-tomato" /> Telegram AI helper</h2>
+        <span className="rounded-full bg-crust/15 px-2.5 py-0.5 text-[11.5px] font-bold text-[#8a4a14]">Cloudflare Workers AI</span>
+        <button role="switch" aria-checked={a.enabled !== false} onClick={() => set('enabled', a.enabled === false)} className={`relative ml-auto h-7 w-12 rounded-full transition ${a.enabled !== false ? 'bg-basil' : 'bg-ink/25'}`} aria-label="Telegram AI helper on">
+          <span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${a.enabled !== false ? 'left-[22px]' : 'left-0.5'}`} />
+        </button>
+      </div>
+      <p className="text-[13px] text-muted">
+        Message your connected bot in plain words, like <i>"why are alerts not coming?"</i> or <i>"Ayam sold out, close the shop at 10"</i>.
+        It reads orders, menu, sales, customers, promos and support chats, and <b>/check</b> runs a health check of the shop and the bot.
+        Changes to the menu, orders, promos, opening, delivery fees, customers and support replies arrive as a plan with <b>Confirm</b> / <b>Cancel</b> buttons. Nothing changes until you tap Confirm.
+        Money actions never run from Telegram: payments, wallets, refunds, bank details, PINs and admin emails stay here behind your transaction PIN. <b>/reset</b> clears its memory.
+      </p>
+      <fieldset disabled={a.enabled === false} className="grid gap-2 disabled:opacity-50 sm:grid-cols-2">
+        <legend className="mb-2 text-[13px] font-bold">Model (needs tool use)</legend>
+        {OPS_MODELS.map((m) => (
+          <label key={m.id} className={`flex cursor-pointer gap-3 rounded-2xl border-[1.5px] p-3 transition ${a.model === m.id ? 'border-crust bg-cheese/15' : 'border-line bg-white hover:border-crust/50'}`}>
+            <input type="radio" name="ops-model" className="mt-1 size-4 accent-[#c9732a]" checked={a.model === m.id} onChange={() => set('model', m.id)} />
+            <span className="min-w-0">
+              <span className="block text-[14px] font-bold">{m.label}{m.id === DEFAULT_OPS_MODEL && <span className="ml-2 text-[11px] font-bold uppercase tracking-wider text-basil">Recommended</span>}</span>
+              <span className="block text-[12.5px] text-muted">{m.note}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="text-[12px] text-muted">The switch and model save with <b>Save settings</b>. If answers look wrong, try another model.</p>
+    </section>
+  )
+}
+
 // ---- owner's business account book (Ryt Bank). Seller only.
 const LEDGER_CAT = {
   sale_transfer: ['Sale (transfer)', 'bg-basil/15 text-basil'], sale_cod: ['Sale (COD bank-in)', 'bg-basil/15 text-basil'],
@@ -1617,6 +1654,7 @@ function ShopSettings({ pin }) {
       <GoogleSettings s={s} setS={setS} />
       <TelegramSettings s={s} setS={setS} pin={pin} />
       <AiChatSettings s={s} setS={setS} pin={pin} />
+      <OpsAiSettings s={s} setS={setS} />
       <section className="card space-y-4 p-5">
         <h2 className="font-display text-2xl tracking-wide">Delivery fee</h2>
         <div className="grid gap-3 sm:grid-cols-3">

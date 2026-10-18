@@ -7,8 +7,12 @@ export const WEBHOOK_PATH = '/api/telegram/webhook'
 export const COMMANDS = [
   { command: 'start', description: 'Status kedai & butang pantas' },
   { command: 'status', description: 'Pesanan hari ini & yang perlu tindakan' },
+  { command: 'check', description: 'Semakan kesihatan kedai & sistem' },
+  { command: 'reset', description: 'Mula perbualan baru dengan pembantu AI' },
   { command: 'stop', description: 'Berhenti terima notifikasi di chat ini' },
 ]
+// callback_query = the Confirm / Cancel buttons under the AI helper's change plans
+export const HOOK_UPDATES = ['message', 'callback_query', 'my_chat_member']
 
 /** one Bot API call; never throws - returns { ok, result } or { ok: false, error, code } */
 export async function tgApi(token, method, body, timeout = 10000) {

@@ -3,7 +3,8 @@ import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import { ShopFiles } from './runtime/storage.js'
 import { createCloudApp } from './runtime/app.js'
-import { permanentFailure } from '../telegram-bot.js'
+import { permanentFailure, tgApi } from '../telegram-bot.js'
+import { opsModel, runOpsTurn } from '../ops-assistant.js'
 import { aiModel, aiText } from '../workers-ai.js'
 
 const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
@@ -25,6 +26,7 @@ export default {
 // A future multi-shop system must create a separate object per shop.
 export class PizzadoniaShop extends DurableObject {
   queue = Promise.resolve()
+  ops = Promise.resolve()
   constructor(ctx, env) {
     super(ctx, env)
     ShopFiles.initialize(this.ctx.storage.sql)
@@ -35,13 +37,38 @@ export class PizzadoniaShop extends DurableObject {
     let release
     this.queue = new Promise(resolve => { release = resolve })
     await previous
-    try { return await this.handle(request) }
+    const opsJobs = []
+    let result
+    try { result = await this.handle(request, opsJobs) }
     catch (e) {
+      opsJobs.length = 0 // its owner session was discarded with the failed command
       console.error(JSON.stringify({ event: 'shop_error', message: e.message, path: new URL(request.url).pathname }))
-      return response({ error: 'Sistem tidak dapat memproses permintaan. Sila cuba lagi.' }, 500)
+      result = response({ error: 'Sistem tidak dapat memproses permintaan. Sila cuba lagi.' }, 500)
     } finally { release() }
+    // The owner's AI helper runs after the shop lock is released: each of its tool calls is its own serialized
+    // request, so orders keep flowing while the model thinks. Telegram gets its 200 when the turn ends.
+    for (const job of opsJobs) await this.runOps(job)
+    return result
   }
-  async handle(request) {
+  // One helper turn at a time, so two quick messages cannot interleave the helper's memory.
+  runOps(job) {
+    const run = this.ops.then(async () => {
+      const api = async (method, path, body) => {
+        const r = await this.fetch(new Request('https://shop.internal' + path, { method,
+          headers: { 'x-admin-session': job.session, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }))
+        return { status: r.status, data: await r.json().catch(() => null) }
+      }
+      const ai = this.env.AI ? (messages, tools, model) => this.env.AI.run(opsModel(model), { messages, tools, max_tokens: 1500, temperature: 0.2 }) : null
+      try { await runOpsTurn(job, { ai, api, tg: (method, body) => tgApi(job.token, method, body, 15000) }) }
+      catch (e) {
+        console.error(JSON.stringify({ event: 'ops_error', message: e.message }))
+        await tgApi(job.token, 'sendMessage', { chat_id: job.chatId, text: '⚠️ Pembantu AI tersekat. Cuba lagi, atau hantar /check.' })
+      } finally { await api('POST', '/api/admin/logout') } // the bot's 5-minute owner session ends with the turn
+    })
+    this.ops = run.catch(() => {})
+    return run
+  }
+  async handle(request, opsJobs = []) {
     const url = new URL(request.url)
     const fs = new ShopFiles(this.ctx.storage)
     const ready = this.ctx.storage.sql.exec("SELECT value FROM metadata WHERE key = 'ready'").toArray().length > 0
@@ -91,7 +118,7 @@ export class PizzadoniaShop extends DurableObject {
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
     const aiGenerate = this.env.AI ? async (messages, model) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: 300, temperature: 0.3 })) : null
-    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate })
+    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) } })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
       const sessions = load('admin-sessions.json', {})
