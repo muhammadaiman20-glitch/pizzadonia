@@ -10,7 +10,6 @@ data/
 .wrangler/
 netlify.toml
 .netlify/
-.hermes-project.json
 
 .wrangler/
 .cloud-build/

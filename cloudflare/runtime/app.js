@@ -65,7 +65,7 @@ settings.delivery = { ...SETTINGS_SEED.delivery, ...settings.delivery }
 settings.payment = { ...SETTINGS_SEED.payment, ...settings.payment }
 settings.cashback = { ...SETTINGS_SEED.cashback, ...settings.cashback }
 settings.welcome = { ...SETTINGS_SEED.welcome, ...settings.welcome }
-// older shops stored a 9Router / OpenAI-style provider here; only the on/off switch carries over
+// older shops stored another AI provider here; only the on/off switch carries over
 settings.aiChat = { enabled: settings.aiChat?.enabled !== false, model: aiModel(settings.aiChat?.model) }
 settings.telegram = { ...SETTINGS_SEED.telegram, ...settings.telegram }
 // fire-and-forget Telegram message for one kind of event (payments | orders | support)
