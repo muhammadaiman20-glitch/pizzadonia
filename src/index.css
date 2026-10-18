@@ -11,6 +11,8 @@
   --color-cheese: #ffc94a;
   --color-crust: #c9732a;
   --color-basil: #2f7d4f;
+  --color-telegram: #1677a8; /* Telegram blue, deepened for white text (4.9:1) */
+  --color-telegram-deep: #12628b;
   --font-display: 'Lilita One', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --shadow-card: 0 1px 2px rgb(42 26 18 / 0.06), 0 8px 24px -12px rgb(42 26 18 / 0.18);
@@ -55,8 +57,15 @@ body {
 .rise { animation: rise 0.4s ease both; }
 @keyframes spin-slow { to { transform: rotate(360deg); } }
 .spin-slow { animation: spin-slow 40s linear infinite; }
+/* Telegram link line: dashes flowing toward the owner's chat while we wait for Start */
+.tg-dash { background: repeating-linear-gradient(90deg, rgb(122 101 88 / 0.35) 0 6px, transparent 6px 12px); }
+.tg-flow {
+  background: repeating-linear-gradient(90deg, var(--color-telegram) 0 6px, transparent 6px 12px);
+  background-size: 24px 100%; animation: tg-flow 0.9s linear infinite;
+}
+@keyframes tg-flow { to { background-position: 24px 0; } }
 .leaflet-container { font-family: var(--font-sans); }
 .pin-icon { background: none; border: none; }
 @media (prefers-reduced-motion: reduce) {
-  .pop, .rise, .spin-slow { animation: none; }
+  .pop, .rise, .spin-slow, .tg-flow { animation: none; }
 }

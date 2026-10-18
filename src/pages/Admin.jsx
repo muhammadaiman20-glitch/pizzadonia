@@ -9,6 +9,7 @@ import { TX } from './Wallet.jsx'
 import { autoRefresh, adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
 import { withTxPin } from '../components/PinPrompt.jsx'
+import { TelegramChip, TelegramSettings, useTelegramStatus } from '../components/TelegramConnect.jsx'
 
 const ago = (iso) => {
   const m = Math.round((Date.now() - new Date(iso)) / 60000)
@@ -841,73 +842,6 @@ function Support({ pin }) {
         </div>
       )}
     </div>
-  )
-}
-
-function TelegramSettings({ s, setS, pin }) {
-  const t = s.telegram || {}
-  const [msg, setMsg] = useState('')
-  const set = (k, v) => setS({ ...s, telegram: { ...t, [k]: v } })
-  const test = async () => {
-    setMsg('Sending…')
-    try {
-      await api('/api/admin/telegram-test', { method: 'POST', body: {}, pin })
-      setMsg('Sent - check your Telegram')
-    } catch (e) {
-      setMsg(e.message)
-    }
-  }
-  const box = (k, label) => (
-    <label key={k} className="flex items-center gap-2 text-[13.5px]">
-      <input type="checkbox" className="size-5 accent-[#e23d2d]" checked={t[k] !== false} onChange={(e) => set(k, e.target.checked)} disabled={!t.enabled} /> {label}
-    </label>
-  )
-  return (
-    <section className="card space-y-3 p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-display text-2xl tracking-wide">Telegram notifications</h2>
-        <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${s.telegramReady ? 'bg-basil text-white' : 'bg-tomato/10 text-tomato'}`}>{s.telegramReady ? 'Bot found (Hermes)' : 'No bot set up'}</span>
-        <button role="switch" aria-checked={t.enabled} onClick={() => set('enabled', !t.enabled)} className={`relative ml-auto h-7 w-12 rounded-full transition ${t.enabled ? 'bg-basil' : 'bg-ink/25'}`} aria-label="Telegram on">
-          <span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${t.enabled ? 'left-[22px]' : 'left-0.5'}`} />
-        </button>
-      </div>
-      <p className="text-[12.5px] text-muted">Sent to your own chat with your Hermes Telegram bot. Receipts, bank-ins and delivery photos come as pictures.</p>
-      <div className="flex flex-wrap gap-x-6 gap-y-2">
-        {box('payments', '💳 Payments (receipts, wallet, COD cash, bank-ins, refunds)')}
-        {box('orders', '🍕 New orders')}
-        {box('support', '🎧 Customer needs you in chat')}
-      </div>
-      <div className="flex items-center gap-3">
-        <button type="button" className="btn btn-ghost px-4 py-2 text-[13px]" onClick={test} disabled={!s.telegramReady}>Send test message</button>
-        {msg && <span className="text-[13px] text-muted">{msg}</span>}
-      </div>
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-cream p-3">
-        <div className="min-w-0 flex-1 text-[12.5px]">
-          <b>Clean up</b> - removes only Pizzadonia alerts from your Telegram (never Hermes messages). Telegram allows deleting for 48 hours after sending.
-          <div className="text-muted">{s.telegramSent ? `${s.telegramSent.deletable} alert(s) can be deleted now` : ''}</div>
-        </div>
-        <button type="button" className="btn btn-ghost px-4 py-2 text-[13px] text-tomato" disabled={!s.telegramReady}
-          onClick={async () => {
-            if (!confirm('Delete Pizzadonia alerts from your Telegram chat?')) return
-            setMsg('Deleting…')
-            try {
-              const r = await api('/api/admin/telegram-clear', { method: 'POST', body: {}, pin })
-              setMsg(`Deleted ${r.deleted} alert(s)${r.tooOld ? ` · ${r.tooOld} older than 48 h (Telegram won't let bots delete those)` : ''}`)
-            } catch (e) {
-              setMsg(e.message)
-            }
-          }}>
-          <Trash2 className="size-4" /> Clear Pizzadonia alerts
-        </button>
-        <Field label="Auto-delete alerts after" hint="0 = keep · max 47 h">
-          <div className="flex items-center gap-2">
-            <input className="field w-20 py-2" type="number" min="0" max="47" value={t.autoDeleteHours ?? 0} onChange={(e) => set('autoDeleteHours', e.target.value)} />
-            <span className="text-[13px]">hours</span>
-          </div>
-        </Field>
-      </div>
-      <p className="text-[12px] text-muted">On/off choices and auto-delete save with <b>Save settings</b>.</p>
-    </section>
   )
 }
 
@@ -2098,6 +2032,13 @@ export default function Admin() {
     setPin('')
   }, [])
   const supportBadge = useSupportBadge(pin)
+  const [tgStatus] = useTelegramStatus(pin)
+  const openTelegram = () => {
+    setTab('settings')
+    // the settings tab loads first, then the card is there to scroll to
+    const go = (n) => { const el = document.getElementById('telegram'); if (el) el.scrollIntoView({ behavior: 'smooth' }); else if (n) setTimeout(() => go(n - 1), 150) }
+    go(20)
+  }
   if (!pin) return <Login onOk={setPin} />
   const TABS = [['orders', 'Orders', ClipboardList], ['account', 'Business account', PiggyBank], ['support', supportBadge ? `Support (${supportBadge})` : 'Support', Headset], ['customers', 'Customers', Users], ['money', 'Money', Landmark], ['wallets', 'Wallets & promo', Wallet], ['menu', 'Menu', UtensilsCrossed], ['settings', 'Shop & fees', Settings]]
   return (
@@ -2106,7 +2047,8 @@ export default function Admin() {
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Logo small />
           <span className="rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">Seller</span>
-          <button onClick={logout} className="btn btn-ghost ml-auto px-3 py-1.5 text-[12.5px]"><LogOut className="size-3.5" /> Log out</button>
+          <div className="ml-auto"><TelegramChip st={tgStatus} onOpen={openTelegram} /></div>
+          <button onClick={logout} className="btn btn-ghost px-3 py-1.5 text-[12.5px]"><LogOut className="size-3.5" /> Log out</button>
         </div>
         <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 pb-2">
           {TABS.map(([id, l, I]) => (

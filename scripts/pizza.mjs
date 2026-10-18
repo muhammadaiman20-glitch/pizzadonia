@@ -17,12 +17,12 @@ try {
 
 let shop = null
 try {
-  shop = await (await fetch('http://127.0.0.1:5400/api/shop', { signal: AbortSignal.timeout(5000) })).json()
+  shop = await (await fetch(`${SITE}/api/shop`, { signal: AbortSignal.timeout(5000) })).json()
 } catch {
   /* shop not running */
 }
 const lines = ['🍕 Pizzadonia']
-if (!shop) lines.push('⚠️ Kedai tidak berjalan di PC - pelanggan tak boleh order. Mulakan Pizzadonia di dashboard (Projects).')
+if (!shop) lines.push('⚠️ Kedai tidak dapat dihubungi sekarang. Cuba buka pautan di bawah.')
 else {
   lines.push(shop.open ? '🟢 Dibuka - menerima pesanan' : '🔴 Tutup sekarang')
   if (shop.welcome) lines.push(`🎁 Pelanggan baru: hadiah RM${shop.welcome.amount}`)

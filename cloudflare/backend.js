@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import { ShopFiles } from './runtime/storage.js'
 import { createCloudApp } from './runtime/app.js'
+import { permanentFailure } from '../telegram-bot.js'
 
 const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 const safeEqual = (a, b) => {
@@ -80,15 +81,17 @@ export class PizzadoniaShop extends DurableObject {
     const googleTickets = new Map(load('google-tickets.json', []).filter(([,v]) => v.exp > Date.now()))
     // Notifications use a persistent outbox. No fire-and-forget work can mutate a finished request.
     const outbox = load('outbox.json', [])
-    const telegramReady = () => Boolean(this.env.TELEGRAM_BOT_TOKEN && this.env.TELEGRAM_HOME_CHANNEL)
-    const tgSend = async (text, file, _log, buttons) => {
-      if (!telegramReady()) return { ok: false, error: 'Configure the cloud Telegram bot and chat first' }
-      outbox.push({ id: crypto.randomUUID(), text, file: file ? { ...file, data: fs.readFileSync(file.path).toString('base64') } : null, buttons, at: Date.now() })
+    // Fallback bot from cloud secrets; the shop's own bot (token + linked chat) lives in settings and wins.
+    const telegramEnv = () => ({ token: this.env.TELEGRAM_BOT_TOKEN || '', chat: this.env.TELEGRAM_HOME_CHANNEL || '' })
+    const tgSend = async (text, file, _log, buttons, creds) => {
+      if (!creds?.chat) return { ok: false, error: 'Telegram is not connected' }
+      outbox.push({ id: crypto.randomUUID(), chat: creds.chat, text, file: file ? { ...file, data: fs.readFileSync(file.path).toString('base64') } : null, buttons, at: Date.now() })
       save('outbox.json', outbox)
       return { ok: true, queued: true }
     }
+    const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
     const tgClear = async () => ({ deleted: 0, tooOld: 0, error: 'Use Telegram to remove previously sent alerts.' })
-    const app = createCloudApp({ fs, load, save, hits, googleTickets, telegramReady, tgSend, tgClear, aiGenerate: this.env.AI ? async messages => { const r = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', { messages, max_tokens: 300, temperature: 0.3 }); return r.response || '' } : null, sentCount: () => ({ total: 0, deletable: 0 }) })
+    const app = createCloudApp({ fs, load, save, hits, googleTickets, telegramEnv, tgSend, tgClear, tgDelivery, aiGenerate: this.env.AI ? async messages => { const r = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', { messages, max_tokens: 300, temperature: 0.3 }); return r.response || '' } : null, sentCount: () => ({ total: 0, deletable: 0 }) })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
       const sessions = load('admin-sessions.json', {})
@@ -101,7 +104,7 @@ export class PizzadoniaShop extends DurableObject {
     save('rate-limits.json', [...hits].filter(([,v]) => v.length))
     save('google-tickets.json', [...googleTickets])
     fs.commit()
-    if (outbox.length && telegramReady()) await this.ctx.storage.setAlarm(Date.now() + 1000)
+    if (outbox.length) await this.ctx.storage.setAlarm(Date.now() + 1000)
     return result
   }
   async alarm() {
@@ -113,25 +116,36 @@ export class PizzadoniaShop extends DurableObject {
       const fs = new ShopFiles(this.ctx.storage)
       const outbox = fs.load('outbox.json', [])
       const item = outbox[0]
-      if (!item || !this.env.TELEGRAM_BOT_TOKEN || !this.env.TELEGRAM_HOME_CHANNEL) return
+      if (!item) return
+      const tgs = fs.load('settings.json', {}).telegram || {}
+      const token = tgs.botToken || this.env.TELEGRAM_BOT_TOKEN
+      const chat = item.chat || this.env.TELEGRAM_HOME_CHANNEL
+      if (!token || !chat) return
       // Schedule retry before I/O so a terminated invocation does not strand the outbox.
       await this.ctx.storage.setAlarm(Date.now() + 60000)
       let body, method = 'sendMessage', headers = {}
       if (item.file) {
         const f = new FormData(); const pdf = item.file.type === 'pdf'
-        f.append('chat_id', this.env.TELEGRAM_HOME_CHANNEL)
+        f.append('chat_id', chat)
         f.append('caption', item.text.slice(0,1000))
         if (item.buttons) f.append('reply_markup', JSON.stringify({ inline_keyboard: item.buttons }))
         f.append(pdf ? 'document' : 'photo', new Blob([Buffer.from(item.file.data,'base64')], { type: pdf ? 'application/pdf' : 'image/' + (item.file.type === 'jpg' ? 'jpeg' : item.file.type) }), item.file.path.split('/').pop())
         body = f; method = pdf ? 'sendDocument' : 'sendPhoto'
       } else {
         headers['Content-Type'] = 'application/json'
-        body = JSON.stringify({ chat_id: this.env.TELEGRAM_HOME_CHANNEL, text: item.text.slice(0,4000), ...(item.buttons ? { reply_markup: { inline_keyboard: item.buttons } } : {}) })
+        body = JSON.stringify({ chat_id: chat, text: item.text.slice(0,4000), ...(item.buttons ? { reply_markup: { inline_keyboard: item.buttons } } : {}) })
       }
-      const r = await fetch(`https://api.telegram.org/bot${this.env.TELEGRAM_BOT_TOKEN}/${method}`, { method: 'POST', headers, body, signal: AbortSignal.timeout(15000) })
-      const data = await r.json()
-      if (data.ok) {
-        fs.save('outbox.json', outbox.slice(1)); fs.commit()
+      let data
+      try {
+        const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers, body, signal: AbortSignal.timeout(15000) })
+        data = await r.json().catch(() => ({ ok: false, error_code: r.status, description: `HTTP ${r.status}` }))
+      } catch (e) { data = { ok: false, error_code: 0, description: e.message } }
+      // Success, or a failure retrying can't fix (bot blocked, chat gone, bad token): move on to the next alert.
+      const done = data.ok || permanentFailure(data.error_code)
+      fs.save('telegram-delivery.json', { at: Date.now(), ok: Boolean(data.ok), error: data.ok ? '' : data.description || 'Send failed', permanent: !data.ok && done })
+      if (done) fs.save('outbox.json', outbox.slice(1))
+      fs.commit()
+      if (done) {
         if (outbox.length > 1) await this.ctx.storage.setAlarm(Date.now()+1000)
         else await this.ctx.storage.deleteAlarm()
       }

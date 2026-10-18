@@ -1,12 +1,15 @@
-// Telegram heads-ups to the owner, through the owner's own bot (the one Hermes uses: TELEGRAM_BOT_TOKEN +
-// TELEGRAM_HOME_CHANNEL in %LOCALAPPDATA%\hermes\.env). Sending never blocks or breaks a request.
+// Local transport for Telegram alerts. server.js decides WHICH bot and chat (Pizzadonia's own bot from the
+// dashboard, else Hermes' bot from %LOCALAPPDATA%\hermes\.env as a fallback) and passes them in as creds.
+// Sending never blocks or breaks a request.
 import fs from 'node:fs'
 import path from 'node:path'
+import { permanentFailure } from './telegram-bot.js'
 
 const ENV_FILE = path.join(process.env.LOCALAPPDATA || '', 'hermes', '.env')
 let cache = { at: 0, token: '', chat: '' }
 
-function creds() {
+/** fallback bot: Hermes' TELEGRAM_BOT_TOKEN + TELEGRAM_HOME_CHANNEL (re-read every minute) */
+export function telegramEnv() {
   if (Date.now() - cache.at < 60000) return cache
   let token = ''
   let chat = ''
@@ -20,13 +23,15 @@ function creds() {
       if (k === 'TELEGRAM_HOME_CHANNEL') chat = v
     }
   } catch {
-    /* no Hermes .env -> Telegram off */
+    /* no Hermes .env -> no fallback bot */
   }
   cache = { at: Date.now(), token, chat }
   return cache
 }
 
-export const telegramReady = () => Boolean(creds().token && creds().chat)
+// last delivery result, shown on the dashboard's connection card
+let delivery = { at: 0, ok: null, error: '' }
+export const tgDelivery = () => ({ ...delivery, queued: 0 })
 
 // every alert we send is remembered (id + time) so it can be deleted later - only OUR messages, never Hermes'.
 // Telegram lets a bot delete its own messages for 48 hours only.
@@ -48,8 +53,7 @@ const MAX_AGE = 47.5 * 3600e3
 export const sentCount = () => ({ total: sent.length, deletable: sent.filter((m) => Date.now() - m.at < MAX_AGE).length })
 
 /** delete our alerts older than minAgeMs (0 = every one Telegram still allows). Returns { deleted, tooOld }. */
-export async function tgClear(minAgeMs = 0) {
-  const { token, chat } = creds()
+export async function tgClear(minAgeMs, { token, chat }) {
   if (!token || !chat) return { deleted: 0, tooOld: 0, error: 'Telegram not set up' }
   const now = Date.now()
   let deleted = 0
@@ -71,7 +75,7 @@ export async function tgClear(minAgeMs = 0) {
       })
       const res = await r.json().catch(() => ({}))
       if (res.ok) deleted++
-      else if (!/not found|can't be deleted|message to delete/i.test(res.description || '')) keep.push(m)
+      else if (!/not found|can't be deleted|message to delete|chat not found|bot was blocked/i.test(res.description || '')) keep.push(m)
     } catch {
       keep.push(m)
     }
@@ -81,12 +85,11 @@ export async function tgClear(minAgeMs = 0) {
   return { deleted, tooOld }
 }
 
-/** text (max ~1000 chars with a photo), optional file { path, type: 'jpg'|'png'|'webp'|'pdf' }. Returns a promise. */
-// buttons = [[{ text, url } | { text, web_app: { url } }], ...] -> Telegram inline keyboard under the message
-export async function tgSend(text, file, log = console.log, buttons = null) {
-  const markup = buttons?.length ? JSON.stringify({ inline_keyboard: buttons }) : null
-  const { token, chat } = creds()
-  if (!token || !chat) return { ok: false, error: 'Telegram not set up in Hermes (.env)' }
+/** text (max ~1000 chars with a photo), optional file { path, type: 'jpg'|'png'|'webp'|'pdf' }.
+ *  buttons = [[{ text, url } | { text, web_app: { url } }], ...] -> inline keyboard under the message */
+export async function tgSend(text, file, log = console.log, buttons = null, { token, chat } = {}) {
+  if (!token || !chat) return { ok: false, error: 'Telegram is not connected' }
+  const markup = buttons?.length ? { inline_keyboard: buttons } : null
   const base = `https://api.telegram.org/bot${token}`
   try {
     let r
@@ -95,27 +98,31 @@ export async function tgSend(text, file, log = console.log, buttons = null) {
       const form = new FormData()
       form.append('chat_id', chat)
       form.append('caption', text.slice(0, 1000))
-      if (markup) form.append('reply_markup', markup)
+      if (markup) form.append('reply_markup', JSON.stringify(markup))
       const mime = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' }[file.type] || 'application/octet-stream'
       form.append(isPdf ? 'document' : 'photo', new Blob([fs.readFileSync(file.path)], { type: mime }), path.basename(file.path))
       r = await fetch(`${base}/${isPdf ? 'sendDocument' : 'sendPhoto'}`, { method: 'POST', body: form, signal: AbortSignal.timeout(20000) })
     } else {
       r = await fetch(`${base}/sendMessage`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({ chat_id: chat, text: text.slice(0, 4000), disable_web_page_preview: true, ...(markup ? { reply_markup: JSON.parse(markup) } : {}) }),
+        body: JSON.stringify({ chat_id: chat, text: text.slice(0, 4000), disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) }),
       })
     }
     const j = await r.json().catch(() => ({}))
-    if (j.ok && j.result?.message_id) {
+    if (!j.ok) {
+      const error = j.description || `HTTP ${r.status}`
+      delivery = { at: Date.now(), ok: false, error, permanent: permanentFailure(j.error_code || r.status) }
+      log(`[telegram] failed: ${error}`)
+      return { ok: false, error }
+    }
+    if (j.result?.message_id) {
       sent.push({ id: j.result.message_id, chat, at: Date.now() })
       saveSent()
     }
-    if (!j.ok) {
-      log(`[telegram] failed: ${j.description || r.status}`)
-      return { ok: false, error: j.description || `HTTP ${r.status}` }
-    }
+    delivery = { at: Date.now(), ok: true, error: '' }
     return { ok: true }
   } catch (e) {
+    delivery = { at: Date.now(), ok: false, error: e.message }
     log(`[telegram] failed: ${e.message}`)
     return { ok: false, error: e.message }
   }
