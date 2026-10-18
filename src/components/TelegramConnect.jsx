@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bot, Check, Copy, ExternalLink, KeyRound, Loader2, RefreshCw, Send, Store, Trash2, TriangleAlert, Unlink, UserRound, X } from 'lucide-react'
-import { api, useShop } from '../lib.js'
+import { api } from '../lib.js'
 import { withTxPin } from './PinPrompt.jsx'
 
 // Seller dashboard <-> Pizzadonia's own Telegram bot.
@@ -87,7 +87,7 @@ function Diagram({ st, shopName, justLinked }) {
       aria-label={`Shop to bot: ${hookState}. Bot to your Telegram: ${chatState}.`}>
       <Node icon={Store} title={shopName} sub="seller dashboard" state="ok" />
       <div className="flex flex-1 pt-6 sm:pt-7"><Segment state={hookState} /></div>
-      <Node icon={Bot} title={st.bot ? `@${st.bot.username}` : 'No bot yet'} sub={st.mode === 'hermes' ? 'Hermes bot' : st.bot?.name || 'from BotFather'} state={hookState} />
+      <Node icon={Bot} title={st.bot ? `@${st.bot.username}` : 'No bot yet'} sub={st.bot?.name || 'from BotFather'} state={hookState} />
       <div className="flex flex-1 pt-6 sm:pt-7"><Segment state={chatState} /></div>
       <Node icon={UserRound} title={st.connected ? st.chat?.name || 'Your chat' : 'You'} sub={st.connected ? (st.chat?.username ? `@${st.chat.username}` : 'Telegram') : st.bot ? 'tap Start' : 'Telegram'} state={chatState} pop={justLinked} />
     </div>
@@ -184,7 +184,6 @@ function useStartLink(pin, wanted) {
 }
 
 export function TelegramSettings({ s, setS, pin }) {
-  const { shop } = useShop()
   const t = s.telegram || {}
   const [st, load] = useTelegramStatus(pin, { live: true, every: 30000 })
   const [msg, setMsg] = useState('')
@@ -285,9 +284,7 @@ export function TelegramSettings({ s, setS, pin }) {
           {(!ownBot || changing) && (
             <div className="space-y-3">
               <p className="text-[13px] text-muted">
-                {st.mode === 'hermes'
-                  ? 'Alerts now go through the Hermes bot on your PC. Give Pizzadonia its own bot so you can connect with one tap and alerts work even when the PC is off.'
-                  : 'Get new orders, receipts and customer chats on your phone. Make a free bot for Pizzadonia - it takes a minute.'}
+                Get new orders, receipts and customer chats on your phone. Make a free bot for Pizzadonia - it takes a minute.
               </p>
               <TokenForm pin={pin} onSaved={() => (setChanging(false), setJustLinked(false), load(true))} onCancel={changing ? () => setChanging(false) : null} />
             </div>
@@ -377,42 +374,8 @@ export function TelegramSettings({ s, setS, pin }) {
             </div>
           )}
 
-          {!shop?.cloudHosted && st.mode !== 'off' && <CleanUp s={s} t={t} set={set} pin={pin} setMsg={setMsg} />}
         </>
       )}
     </section>
-  )
-}
-
-// local PC server only: the bot may delete its own alerts for 48 h
-function CleanUp({ s, t, set, pin, setMsg }) {
-  return (
-    <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-cream p-3">
-      <div className="min-w-0 basis-full text-[12.5px] sm:basis-0 sm:flex-1">
-        <b>Clean up</b> - removes only Pizzadonia alerts from your Telegram. Telegram allows deleting for 48 hours after sending.
-        <div className="text-muted">{s.telegramSent ? `${s.telegramSent.deletable} alert(s) can be deleted now` : ''}</div>
-      </div>
-      <button type="button" className="btn btn-ghost px-4 py-2 text-[13px] text-tomato"
-        onClick={async () => {
-          if (!confirm('Delete Pizzadonia alerts from your Telegram chat?')) return
-          setMsg('Deleting…')
-          try {
-            const r = await api('/api/admin/telegram-clear', { method: 'POST', body: {}, pin })
-            setMsg(`Deleted ${r.deleted} alert(s)${r.tooOld ? ` · ${r.tooOld} older than 48 h (Telegram won't let bots delete those)` : ''}`)
-          } catch (e) {
-            setMsg(e.message)
-          }
-        }}>
-        <Trash2 className="size-4" /> Clear alerts
-      </button>
-      <label className="block">
-        <span className="mb-1 block text-[13px] font-bold">Auto-delete after</span>
-        <span className="flex items-center gap-2">
-          <input className="field w-20 py-2" type="number" min="0" max="47" value={t.autoDeleteHours ?? 0} onChange={(e) => set('autoDeleteHours', e.target.value)} />
-          <span className="text-[13px]">hours</span>
-        </span>
-        <span className="mt-1 block text-[12px] text-muted">0 = keep · max 47 h</span>
-      </label>
-    </div>
   )
 }

@@ -4,7 +4,8 @@
 import express from 'express'
 import { createSupport } from './support.js'
 import { createLedger } from './ledger.js'
-import { sentCount, telegramEnv, tgClear, tgDelivery, tgSend } from './telegram.js'
+import { tgDelivery, tgSend } from './telegram.js'
+import { AI_MODELS, aiModel } from './workers-ai.js'
 import { COMMANDS, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from './telegram-bot.js'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -73,11 +74,11 @@ const SETTINGS_SEED = {
   // of at least minOrder. Once per phone number, ever.
   welcome: { active: false, amount: 5, minOrder: 20 },
   cashback: { active: false, percent: 10, start: '', end: '', minOrder: 0, maxPerOrder: 0, exclude: [] }, // exclude = product ids with no cashback
-  // optional AI for the support chat: any OpenAI-compatible endpoint (default: your local 9Router). Plain chat, no tools.
-  aiChat: { baseUrl: 'http://127.0.0.1:20128/v1', apiKey: '', model: 'gemini/gemini-3.8-flash' },
+  // support chat AI: Cloudflare Workers AI (cloud only). Plain chat, no tools; off = built-in replies only.
+  aiChat: { enabled: true, model: AI_MODELS[0].id },
   // Telegram heads-ups to the owner: payments, new orders, support chats. Pizzadonia's own bot (token pasted on the
-  // dashboard, chat linked by /start <code>); without one, Hermes' bot from the PC's .env is the fallback.
-  telegram: { enabled: true, payments: true, orders: true, support: true, autoDeleteHours: 0, // 0 = keep alerts
+  // dashboard, chat linked by /start <code>).
+  telegram: { enabled: true, payments: true, orders: true, support: true,
     botToken: '', bot: null, webhookSecret: '', chatId: '', chat: null, link: null, blockedAt: '' },
   riderKeepsFee: true, // COD: the rider keeps the delivery fee and banks in the rest (pizza money) to the owner
 }
@@ -88,15 +89,14 @@ settings.delivery = { ...SETTINGS_SEED.delivery, ...settings.delivery }
 settings.payment = { ...SETTINGS_SEED.payment, ...settings.payment }
 settings.cashback = { ...SETTINGS_SEED.cashback, ...settings.cashback }
 settings.welcome = { ...SETTINGS_SEED.welcome, ...settings.welcome }
-settings.aiChat = { ...SETTINGS_SEED.aiChat, ...settings.aiChat }
+// older shops stored another AI provider here; only the on/off switch carries over
+settings.aiChat = { enabled: settings.aiChat?.enabled !== false, model: aiModel(settings.aiChat?.model) }
 settings.telegram = { ...SETTINGS_SEED.telegram, ...settings.telegram }
 // fire-and-forget Telegram message for one kind of event (payments | orders | support)
-// which bot + chat alerts go to: our own bot once it's set (even before /start - then nothing is sent), else Hermes'
+// which bot + chat alerts go to ('' chat until the owner taps Start - then nothing is sent)
 function tgCreds() {
   const t = settings.telegram
-  if (t.botToken) return { mode: 'own', token: t.botToken, chat: t.chatId }
-  const e = telegramEnv()
-  return e.token && e.chat ? { mode: 'hermes', token: e.token, chat: e.chat } : { mode: 'off', token: '', chat: '' }
+  return t.botToken ? { mode: 'own', token: t.botToken, chat: t.chatId } : { mode: 'off', token: '', chat: '' }
 }
 const tgReady = () => Boolean(tgCreds().chat)
 const siteBase = () => settings.siteUrl || settings.publicUrl || ''
@@ -1424,7 +1424,7 @@ app.delete('/api/admin/payment-qr', admin, adminTx, (_req, res) => {
 function settingsView(extra = {}) {
   // the bot token, webhook secret and link code never leave the server
   const { botToken, webhookSecret, link, ...telegram } = settings.telegram
-  return { ...settings, telegram: { ...telegram, hasToken: Boolean(botToken) }, telegramReady: tgReady(), telegramMode: tgCreds().mode, telegramSent: sentCount(), aiChat: { ...settings.aiChat, apiKey: settings.aiChat.apiKey ? '••••' + settings.aiChat.apiKey.slice(-4) : '' }, menu, ...extra }
+  return { ...settings, telegram: { ...telegram, hasToken: Boolean(botToken) }, telegramReady: tgReady(), telegramMode: tgCreds().mode, menu, ...extra }
 }
 app.get('/api/admin/settings', admin, (req, res) => res.json(settingsView({ me: req.adminEmail || null })))
 app.put('/api/admin/settings', admin, (req, res) => {
@@ -1497,14 +1497,10 @@ app.put('/api/admin/settings', admin, (req, res) => {
     const t = b.telegram || {}
     // only the switches come from this form - bot + chat are managed by the /api/admin/telegram/* routes
     next.telegram = { ...settings.telegram, ...Object.fromEntries(['enabled', 'payments', 'orders', 'support'].map((k) => [k, t[k] === undefined ? settings.telegram[k] : Boolean(t[k])])) }
-    next.telegram.autoDeleteHours = Math.max(0, Math.min(47, Math.round(+(t.autoDeleteHours ?? settings.telegram.autoDeleteHours) || 0)))
   }
   if (b.aiChat !== undefined) {
     const a = b.aiChat || {}
-    const key = String(a.apiKey ?? '')
-    next.aiChat = { baseUrl: /^https?:\/\/[^\s]+$/.test(String(a.baseUrl || '')) ? String(a.baseUrl).trim() : settings.aiChat.baseUrl,
-      model: clean(a.model ?? settings.aiChat.model, 100) || settings.aiChat.model,
-      apiKey: key.startsWith('••••') ? settings.aiChat.apiKey : key.trim().slice(0, 300) }
+    next.aiChat = { enabled: a.enabled === undefined ? settings.aiChat.enabled : Boolean(a.enabled), model: aiModel(a.model ?? settings.aiChat.model) }
   }
   if (b.adminEmails !== undefined) {
     const list = [...new Set((Array.isArray(b.adminEmails) ? b.adminEmails : String(b.adminEmails).split(/[\s,]+/))
@@ -1628,8 +1624,25 @@ app.delete('/api/admin/menu/:id', admin, (req, res) => {
   res.json({ menu })
 })
 
+// support chat AI (Workers AI). Exists only in the cloud copy: prepare-cloud swaps in the AI binding.
+const aiGenerate = null
+// try the support AI with a sample question (Shop & fees)
+app.post('/api/admin/ai-test', admin, async (req, res) => {
+  if (!aiGenerate) return res.status(503).json({ error: 'Workers AI runs on the Cloudflare shop only - try it on the live site.' })
+  const model = aiModel(req.body?.model || settings.aiChat.model)
+  const question = clean(req.body?.question, 300) || 'Ada pizza apa? Berapa caj hantar?'
+  const started = Date.now()
+  try {
+    const text = await aiGenerate([{ role: 'system', content: `Anda pembantu kedai pizza ${settings.shopName}. Jawab ringkas dalam Bahasa Melayu (maks 3 ayat).` }, { role: 'user', content: question }], model)
+    if (!text) return res.status(502).json({ error: 'The model answered with nothing - try another model.' })
+    res.json({ model, question, text: text.slice(0, 800), ms: Date.now() - started })
+  } catch (e) {
+    res.status(502).json({ error: `Workers AI: ${e.message}` })
+  }
+})
+
 createSupport({ load, save, getSettings: () => settings, getMenu: () => menu, getOrders: () => orders, limited, hit, clean, normPhone,
-  accountOf, admin, publicPayment, cashbackLive, notify: (text) => tg('support', text) })(app)
+  accountOf, admin, publicPayment, cashbackLive, notify: (text) => tg('support', text), aiGenerate })(app)
 
 createLedger({ load, save, getSettings: () => settings, getOrders: () => orders, getBankins: () => bankins, getWallets: () => wallets,
   walletBal, admin, adminTx, clean, money })(app)
@@ -1711,23 +1724,16 @@ app.get('/api/admin/telegram', admin, async (req, res) => {
   const site = siteBase()
   const out = {
     mode: c.mode, enabled: t.enabled, bot: t.bot, connected: Boolean(c.chat), blockedAt: c.mode === 'own' ? t.blockedAt || '' : '',
-    chat: c.mode === 'own' ? t.chat : c.mode === 'hermes' ? { name: 'Hermes home chat', username: '' } : null,
+    chat: c.mode === 'own' ? t.chat : null,
     waiting: t.link && t.link.exp > Date.now() ? { exp: t.link.exp } : null,
     delivery: tgDelivery(), site, siteOk: /^https:\/\//.test(site),
   }
   if (req.query.live === '1' && c.token) {
-    if (c.mode === 'hermes') {
-      const me = await tgApi(c.token, 'getMe', {}, 6000)
-      if (me.ok) out.bot = { id: me.result.id, username: me.result.username, name: me.result.first_name }
-      out.reachable = me.ok
-      out.error = me.ok ? '' : me.error
-    } else {
-      const w = await tgApi(c.token, 'getWebhookInfo', {}, 6000)
-      out.reachable = w.ok
-      out.error = w.ok ? '' : w.error
-      if (w.ok) out.webhook = { ok: w.result.url === site + WEBHOOK_PATH, pending: w.result.pending_update_count || 0,
-        lastError: w.result.last_error_message || '', lastErrorAt: w.result.last_error_date ? w.result.last_error_date * 1000 : 0 }
-    }
+    const w = await tgApi(c.token, 'getWebhookInfo', {}, 6000)
+    out.reachable = w.ok
+    out.error = w.ok ? '' : w.error
+    if (w.ok) out.webhook = { ok: w.result.url === site + WEBHOOK_PATH, pending: w.result.pending_update_count || 0,
+      lastError: w.result.last_error_message || '', lastErrorAt: w.result.last_error_date ? w.result.last_error_date * 1000 : 0 }
   }
   res.json(out)
 })
@@ -1735,7 +1741,6 @@ app.get('/api/admin/telegram', admin, async (req, res) => {
 app.post('/api/admin/telegram/bot', admin, adminTx, async (req, res) => {
   const token = String(req.body?.token || '').trim()
   if (!TOKEN_RE.test(token)) return res.status(400).json({ error: 'That does not look like a bot token. Copy the whole line BotFather sent, like 123456789:AAH…' })
-  if (token === telegramEnv().token) return res.status(400).json({ error: "That's the Hermes bot - Hermes reads its messages, so it can't also link to Pizzadonia. Create a new bot in @BotFather." })
   const site = siteBase()
   if (!/^https:\/\//.test(site)) return res.status(400).json({ error: 'The shop needs its public https link first (Telegram only talks to https).' })
   const me = await tgApi(token, 'getMe')
@@ -1752,7 +1757,7 @@ app.post('/api/admin/telegram/bot', admin, adminTx, async (req, res) => {
   console.log(`[telegram] bot set @${me.result.username}`)
   res.json({ ok: true, bot: t.bot })
 })
-// forget the bot (and stop its webhook) -> alerts fall back to Hermes on the PC, or stop
+// forget the bot (and stop its webhook) -> alerts stop
 app.delete('/api/admin/telegram/bot', admin, adminTx, async (_req, res) => {
   const t = settings.telegram
   if (t.botToken) await tgApi(t.botToken, 'deleteWebhook', { drop_pending_updates: true })
@@ -1777,17 +1782,12 @@ app.post('/api/admin/telegram/unlink', admin, async (_req, res) => {
 })
 app.post('/api/admin/telegram-test', admin, async (_req, res) => {
   const c = tgCreds()
-  if (!c.chat) return res.status(400).json({ error: c.mode === 'own' ? 'Connect your Telegram chat first (tap Start in the bot).' : 'Telegram is not set up yet.' })
+  if (!c.chat) return res.status(400).json({ error: c.mode === 'own' ? 'Connect your Telegram chat first (tap Start in the bot).' : 'Add your Telegram bot first.' })
   const r = await tgSend(`🍕 ${settings.shopName}: notifikasi Telegram berfungsi! Anda akan dapat mesej bila pelanggan buat pesanan atau bayaran.`, null, undefined, ownerKeyboard(siteBase()), c)
   res.status(r.ok ? 200 : 502).json(r)
 })
 
-// clear our own Telegram alerts (button) + optional auto-delete every 30 min
-app.post('/api/admin/telegram-clear', admin, async (_req, res) => res.json(await tgClear(0, tgCreds())))
-setInterval(() => {
-  const h = +settings.telegram.autoDeleteHours || 0
-  if (h > 0) tgClear(h * 3600e3, tgCreds()).catch(() => {})
-}, 30 * 60 * 1000)
+// ---- end of shared business rules (scripts/prepare-cloud.mjs copies everything above into the cloud backend)
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }))
 

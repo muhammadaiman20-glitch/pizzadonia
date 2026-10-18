@@ -8,6 +8,7 @@ import { PAY_STATUS, shrink } from '../components/PaymentPanel.jsx'
 import { TX } from './Wallet.jsx'
 import { autoRefresh, adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
+import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
 import { TelegramChip, TelegramSettings, useTelegramStatus } from '../components/TelegramConnect.jsx'
 
@@ -845,24 +846,65 @@ function Support({ pin }) {
   )
 }
 
-function AiChatSettings({ s, setS }) {
+function AiChatSettings({ s, setS, pin }) {
   const a = s.aiChat || {}
   const set = (k, v) => setS({ ...s, aiChat: { ...a, [k]: v } })
+  const [question, setQuestion] = useState('Ada pizza apa? Berapa caj hantar?')
+  const [trial, setTrial] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const tryIt = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    setTrial(null)
+    try {
+      setTrial(await api('/api/admin/ai-test', { method: 'POST', body: { question, model: a.model }, pin }))
+    } catch (err) {
+      setTrial({ error: err.message })
+    }
+    setBusy(false)
+  }
   return (
-    <section className="card space-y-3 p-5">
-      <h2 className="flex items-center gap-2 font-display text-2xl tracking-wide"><Bot className="size-5 text-tomato" /> Support chat AI (optional)</h2>
-      <p className="text-[13px] text-muted">
-        Without a key the built-in shop assistant answers (menu, prices, delivery fees, payment, promo, order status) and hands everything else to you.
-        Add an API key to let an AI model answer free-form questions too. It is plain chat - <b>no tools</b>, it can never touch your PC.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="API base URL" hint="Your 9Router: http://127.0.0.1:20128/v1"><input className="field font-mono text-[12.5px]" value={a.baseUrl || ''} onChange={(e) => set('baseUrl', e.target.value)} /></Field>
-        <Field label="Model" hint="e.g. gemini/gemini-3.8-flash"><input className="field font-mono text-[12.5px]" value={a.model || ''} onChange={(e) => set('model', e.target.value)} /></Field>
-        <Field label="API key" hint={a.apiKey ? 'Saved (only the last 4 shown)' : 'Empty = built-in assistant only'}>
-          <input className="field font-mono text-[12.5px]" value={a.apiKey || ''} onChange={(e) => set('apiKey', e.target.value)} placeholder="paste key" autoComplete="off" />
-        </Field>
+    <section className="card space-y-4 p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="flex items-center gap-2 font-display text-2xl tracking-wide"><Bot className="size-5 text-tomato" /> Support chat AI</h2>
+        <span className="rounded-full bg-crust/15 px-2.5 py-0.5 text-[11.5px] font-bold text-[#8a4a14]">Cloudflare Workers AI</span>
+        <button role="switch" aria-checked={a.enabled !== false} onClick={() => set('enabled', a.enabled === false)} className={`relative ml-auto h-7 w-12 rounded-full transition ${a.enabled !== false ? 'bg-basil' : 'bg-ink/25'}`} aria-label="Support chat AI on">
+          <span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${a.enabled !== false ? 'left-[22px]' : 'left-0.5'}`} />
+        </button>
       </div>
-      <p className="text-[12px] text-muted">9Router key: open <a className="font-bold text-tomato underline" href="http://127.0.0.1:20128" target="_blank" rel="noreferrer">127.0.0.1:20128</a> on this PC → API keys → create one named "Pizzadonia" → paste here → Save settings.</p>
+      <p className="text-[13px] text-muted">
+        The built-in assistant always answers menu, prices, delivery fees, payment, promo and order status from your real shop data.
+        With AI on, a Workers AI model also answers free-form questions. It only gets text and has <b>no tools</b>. Complaints and refunds still go to you.
+      </p>
+      <fieldset disabled={a.enabled === false} className="grid gap-2 disabled:opacity-50 sm:grid-cols-2">
+        <legend className="mb-2 text-[13px] font-bold">Model</legend>
+        {AI_MODELS.map((m) => (
+          <label key={m.id} className={`flex cursor-pointer gap-3 rounded-2xl border-[1.5px] p-3 transition ${a.model === m.id ? 'border-crust bg-cheese/15' : 'border-line bg-white hover:border-crust/50'}`}>
+            <input type="radio" name="ai-model" className="mt-1 size-4 accent-[#c9732a]" checked={a.model === m.id} onChange={() => set('model', m.id)} />
+            <span className="min-w-0">
+              <span className="block text-[14px] font-bold">{m.label}{m.id === DEFAULT_AI_MODEL && <span className="ml-2 text-[11px] font-bold uppercase tracking-wider text-basil">Recommended</span>}</span>
+              <span className="block text-[12.5px] text-muted">{m.note}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <form onSubmit={tryIt} className="space-y-2 rounded-2xl bg-cream p-3">
+        <div className="text-[13px] font-bold">Try it as a customer</div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input className="field" value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={300} aria-label="Sample customer question" />
+          <button className="btn btn-ghost shrink-0 px-4 py-2.5 text-[13.5px]" disabled={busy || !question.trim() || a.enabled === false}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Ask
+          </button>
+        </div>
+        {trial?.text && (
+          <div className="rise rounded-2xl rounded-tl-md bg-white px-4 py-3 text-[14px] shadow-card">
+            {trial.text}
+            <div className="mt-1.5 text-[11.5px] text-muted">{AI_MODELS.find((m) => m.id === trial.model)?.label} · {(trial.ms / 1000).toFixed(1)} s</div>
+          </div>
+        )}
+        {trial?.error && <p role="alert" className="text-[13px] font-semibold text-tomato">{trial.error}</p>}
+        <p className="text-[12px] text-muted">Tries the selected model before you save. The on/off switch and model save with <b>Save settings</b>.</p>
+      </form>
     </section>
   )
 }
@@ -1574,7 +1616,7 @@ function ShopSettings({ pin }) {
       <PaymentSettings s={s} setS={setS} pin={pin} />
       <GoogleSettings s={s} setS={setS} />
       <TelegramSettings s={s} setS={setS} pin={pin} />
-      <AiChatSettings s={s} setS={setS} />
+      <AiChatSettings s={s} setS={setS} pin={pin} />
       <section className="card space-y-4 p-5">
         <h2 className="font-display text-2xl tracking-wide">Delivery fee</h2>
         <div className="grid gap-3 sm:grid-cols-3">

@@ -11,7 +11,7 @@ const settings = {
   shopName: 'Test Pizzadonia', open: true,
   shop: { lat: 5.3, lng: 103.1, label: 'Test kitchen' },
   adminPin: '876543', adminEmails: ['owner@example.com'], googleClientId: '123-test.apps.googleusercontent.com',
-  telegram: { enabled: true }, aiChat: { baseUrl: '', apiKey: '', model: '' },
+  telegram: { enabled: true }, aiChat: { baseUrl: 'http://127.0.0.1:20128/v1', apiKey: 'old-key', model: 'gemini/x' },
 }
 const TOKEN = '1234567890:AAHtestTOKENtestTOKENtestTOKEN12345'
 const session = crypto.randomBytes(24).toString('hex')
@@ -56,7 +56,13 @@ await test('Telegram bot: token, /start link, alerts, status, unlink', async () 
     const snapshot = [encode('settings.json', settings), encode('admin-sessions.json', { [session]: { email: 'owner@example.com', exp: Date.now() + 86400000 } })]
     assert.equal((await call('/_migration/import', { method: 'POST', owner: false, body: { files: snapshot, finalize: true }, headers: { 'x-import-key': importKey } })).status, 200)
 
-    let r = await call('/api/admin/telegram')
+    // an old 9Router-style AI setting becomes Workers AI with the default model, no key left behind
+    let r = await call('/api/admin/settings')
+    assert.deepEqual(r.data.aiChat, { enabled: true, model: '@cf/aisingapore/gemma-sea-lion-v4-27b-it' })
+    assert.equal((await call('/api/admin/settings', { method: 'PUT', body: { aiChat: { enabled: true, model: '@cf/evil/model' } } })).data.aiChat.model, '@cf/aisingapore/gemma-sea-lion-v4-27b-it')
+    assert.equal((await call('/api/admin/ai-test', { method: 'POST', body: {} })).status, 503) // no AI binding in this test runtime
+
+    r = await call('/api/admin/telegram')
     assert.equal(r.data.mode, 'off'); assert.equal(r.data.connected, false)
     assert.equal((await call('/api/admin/telegram', { owner: false })).status, 401)
 

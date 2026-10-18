@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer'
 import { ShopFiles } from './runtime/storage.js'
 import { createCloudApp } from './runtime/app.js'
 import { permanentFailure } from '../telegram-bot.js'
+import { aiModel, aiText } from '../workers-ai.js'
 
 const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 const safeEqual = (a, b) => {
@@ -60,8 +61,8 @@ export class PizzadoniaShop extends DurableObject {
         if (!s.googleClientId || !Array.isArray(s.adminEmails) || !s.adminEmails.length || !s.adminPin) return response({ error: 'Owner sign-in and transaction PIN required' }, 400)
         s.siteUrl = this.env.SITE_ORIGIN || 'https://pizzadonia.pages.dev'
         s.publicUrl = s.siteUrl; s.tunnelUrl = ''; s.proxySecret = ''
-        // Local 9Router cannot serve cloud requests. Workers AI supplies the cloud assistant.
-        if (!s.aiChat?.baseUrl?.startsWith('https://')) s.aiChat = { baseUrl: '', apiKey: '', model: '' }
+        // The support assistant runs on Workers AI.
+        s.aiChat = { enabled: s.aiChat?.enabled !== false, model: aiModel(s.aiChat?.model) }
         fs.save('settings.json', s)
       }
       this.ctx.storage.transactionSync(() => {
@@ -81,8 +82,7 @@ export class PizzadoniaShop extends DurableObject {
     const googleTickets = new Map(load('google-tickets.json', []).filter(([,v]) => v.exp > Date.now()))
     // Notifications use a persistent outbox. No fire-and-forget work can mutate a finished request.
     const outbox = load('outbox.json', [])
-    // Fallback bot from cloud secrets; the shop's own bot (token + linked chat) lives in settings and wins.
-    const telegramEnv = () => ({ token: this.env.TELEGRAM_BOT_TOKEN || '', chat: this.env.TELEGRAM_HOME_CHANNEL || '' })
+    // The shop's own bot + linked chat live in settings (Shop & fees -> Telegram).
     const tgSend = async (text, file, _log, buttons, creds) => {
       if (!creds?.chat) return { ok: false, error: 'Telegram is not connected' }
       outbox.push({ id: crypto.randomUUID(), chat: creds.chat, text, file: file ? { ...file, data: fs.readFileSync(file.path).toString('base64') } : null, buttons, at: Date.now() })
@@ -90,8 +90,8 @@ export class PizzadoniaShop extends DurableObject {
       return { ok: true, queued: true }
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
-    const tgClear = async () => ({ deleted: 0, tooOld: 0, error: 'Use Telegram to remove previously sent alerts.' })
-    const app = createCloudApp({ fs, load, save, hits, googleTickets, telegramEnv, tgSend, tgClear, tgDelivery, aiGenerate: this.env.AI ? async messages => { const r = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', { messages, max_tokens: 300, temperature: 0.3 }); return r.response || '' } : null, sentCount: () => ({ total: 0, deletable: 0 }) })
+    const aiGenerate = this.env.AI ? async (messages, model) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: 300, temperature: 0.3 })) : null
+    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
       const sessions = load('admin-sessions.json', {})
@@ -118,8 +118,8 @@ export class PizzadoniaShop extends DurableObject {
       const item = outbox[0]
       if (!item) return
       const tgs = fs.load('settings.json', {}).telegram || {}
-      const token = tgs.botToken || this.env.TELEGRAM_BOT_TOKEN
-      const chat = item.chat || this.env.TELEGRAM_HOME_CHANNEL
+      const token = tgs.botToken
+      const chat = item.chat
       if (!token || !chat) return
       // Schedule retry before I/O so a terminated invocation does not strand the outbox.
       await this.ctx.storage.setAlarm(Date.now() + 60000)
