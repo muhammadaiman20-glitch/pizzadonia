@@ -11,6 +11,7 @@ import GoogleButton from '../components/GoogleButton.jsx'
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
 import { DEFAULT_OPS_MODEL, OPS_MODELS } from '../../ops-assistant.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
+import WhatsAppLogin from '../components/WhatsAppLogin.jsx'
 import { TelegramChip, TelegramSettings, useTelegramStatus } from '../components/TelegramConnect.jsx'
 
 const ago = (iso) => {
@@ -1653,6 +1654,7 @@ function ShopSettings({ pin }) {
       <PaymentSettings s={s} setS={setS} pin={pin} />
       <GoogleSettings s={s} setS={setS} />
       <TelegramSettings s={s} setS={setS} pin={pin} />
+      <WhatsAppLogin pin={pin} />
       <AiChatSettings s={s} setS={setS} pin={pin} />
       <OpsAiSettings s={s} setS={setS} />
       <section className="card space-y-4 p-5">

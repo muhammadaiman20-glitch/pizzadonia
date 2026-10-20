@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { ChevronRight, Loader2, LogOut, MapPin, Package, Trash2, UserRound, Wallet as WalletIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronRight, Loader2, LogOut, MapPin, MessageCircle, Package, Send, Trash2, UserRound, Wallet as WalletIcon } from 'lucide-react'
 import { Header } from './Shop.jsx'
-import { accountApi, api, go, ownerSession, prettyPhone, rm, useAccount, useAutoSubmit, useShop } from '../lib.js'
+import { accountApi, api, go, ownerSession, prettyPhone, rm, store, useAccount, useAutoSubmit, useShop } from '../lib.js'
 import { stepOf } from '../status.js'
 import GoogleButton from '../components/GoogleButton.jsx'
 import { PAY_STATUS } from '../components/PaymentPanel.jsx'
@@ -68,6 +68,148 @@ function GoogleProfile({ g, onCancel }) {
   )
 }
 
+// ---- phone login by WhatsApp / Telegram: no PIN. The customer sends the code from their own WhatsApp (or shares
+// their Telegram contact); this page keeps asking the server and signs in by itself. The pending login is kept in
+// localStorage, so the tab WhatsApp's "back to the shop" link opens can finish it too.
+const PENDING = 'pz.phoneLogin'
+const CHANNELS = {
+  wa: { label: 'WhatsApp', Icon: MessageCircle, cls: 'bg-[#0f7c43] text-white hover:brightness-110', open: 'Hantar kod di WhatsApp',
+    how: 'WhatsApp akan buka dengan mesej siap ditaip. Tekan Hantar, kemudian kembali ke sini.' },
+  tg: { label: 'Telegram', Icon: Send, cls: 'bg-telegram text-white hover:bg-telegram-deep', open: 'Buka Telegram',
+    how: 'Tekan Mula (Start), kemudian "Kongsi nombor telefon saya". Kemudian kembali ke sini.' },
+}
+const mmss = (ms) => {
+  const t = Math.max(0, Math.round(ms / 1000))
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+}
+
+function PhoneLogin({ login }) {
+  const [p, setP] = useState(() => {
+    const x = store.get(PENDING, null)
+    return x && x.exp > Date.now() && login[x.channel] ? x : null
+  })
+  const [needName, setNeedName] = useState('')
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState('')
+  const [err, setErr] = useState('')
+  const [now, setNow] = useState(Date.now())
+  const clear = (msg = '') => {
+    store.set(PENDING, null)
+    setP(null)
+    setNeedName('')
+    setErr(msg)
+  }
+  const done = (r) => {
+    store.set(PENDING, null)
+    accountApi.signedIn(r)
+  }
+  const start = async (channel) => {
+    setErr('')
+    setBusy(channel)
+    try {
+      const r = await api('/api/account/phone-login', { method: 'POST', body: { channel } })
+      store.set(PENDING, r)
+      setP(r)
+      setNeedName('')
+      window.open(r.web, '_blank', 'noopener') // a blocked pop-up is fine: the button on the next screen opens it
+    } catch (e) {
+      setErr(e.message)
+    }
+    setBusy('')
+  }
+  // ask every 2 s (and on coming back to this tab) until WhatsApp / Telegram has proven the number
+  useEffect(() => {
+    if (!p || needName) return
+    let stop = false
+    const check = async () => {
+      try {
+        const r = await api(`/api/account/phone-login/${p.id}`)
+        if (stop) return
+        if (r.token) done(r)
+        else if (r.state === 'needName') setNeedName(r.phone)
+      } catch (e) {
+        if (!stop && (e.status === 410 || e.status === 403)) clear(e.message)
+      }
+    }
+    check()
+    const id = setInterval(() => document.visibilityState === 'visible' && check(), 2000)
+    const back = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', back)
+    return () => {
+      stop = true
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', back)
+    }
+  }, [p?.id, needName]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!p) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [p])
+  useEffect(() => {
+    if (p && now > p.exp) clear('Kod sudah tamat. Tekan butang log masuk sekali lagi.')
+  }, [now]) // eslint-disable-line react-hooks/exhaustive-deps
+  const saveName = async (e) => {
+    e.preventDefault()
+    setBusy('name')
+    setErr('')
+    try {
+      done(await api(`/api/account/phone-login/${p.id}/name`, { method: 'POST', body: { name } }))
+    } catch (e2) {
+      if (e2.status === 410) clear(e2.message)
+      else setErr(e2.message)
+    }
+    setBusy('')
+  }
+  const errBox = err && <p className="mt-3 rounded-xl bg-tomato/10 px-3 py-2 text-[13px] font-semibold text-tomato">{err}</p>
+
+  if (p && needName) {
+    return (
+      <form onSubmit={saveName} className="space-y-3">
+        <p className="rounded-xl bg-basil/10 px-3 py-2 text-[13.5px] font-semibold text-basil">✓ Nombor {prettyPhone(needName)} disahkan. Kali pertama di sini? Isi nama anda.</p>
+        <label className="block">
+          <span className="mb-1.5 block text-[13px] font-bold">Nama</span>
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={60} placeholder="Nama anda" autoFocus />
+        </label>
+        <button className="btn btn-red w-full py-3.5 text-[15px]" disabled={busy === 'name' || name.trim().length < 2}>
+          {busy === 'name' && <Loader2 className="size-4 animate-spin" />} Daftar & log masuk
+        </button>
+        {errBox}
+      </form>
+    )
+  }
+  if (p) {
+    const c = CHANNELS[p.channel]
+    return (
+      <div className="text-center">
+        <p className="text-[13.5px] font-bold">Kod log masuk anda</p>
+        <p className="mt-1 font-display text-5xl tracking-[0.18em]">{p.code}</p>
+        <a href={p.web} target="_blank" rel="noreferrer" className={`btn mt-4 w-full py-3.5 text-[15px] ${c.cls}`}><c.Icon className="size-5" /> {c.open}</a>
+        <p className="mt-3 text-[13px] text-muted">{c.how}</p>
+        <p className="mt-4 flex items-center justify-center gap-2 text-[13px] font-semibold" aria-live="polite"><Loader2 className="size-4 animate-spin text-tomato" /> Menunggu pengesahan · {mmss(p.exp - now)}</p>
+        <button type="button" className="mt-3 text-[13px] text-muted underline" onClick={() => clear()}>Batal</button>
+        {errBox}
+      </div>
+    )
+  }
+  return (
+    <div>
+      <div className="space-y-2.5">
+        {['wa', 'tg'].filter((k) => login[k]).map((k) => {
+          const c = CHANNELS[k]
+          return (
+            <button key={k} className={`btn w-full py-3.5 text-[15px] ${c.cls}`} disabled={!!busy} onClick={() => start(k)}>
+              {busy === k ? <Loader2 className="size-5 animate-spin" /> : <c.Icon className="size-5" />} Log masuk dengan {c.label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-2.5 text-center text-[12.5px] text-muted">Tiada PIN. Nombor baru terus jadi akaun baru.</p>
+      {errBox}
+    </div>
+  )
+}
+
 function AuthForm() {
   const { shop } = useShop()
   const [gProfile, setGProfile] = useState(null)
@@ -111,21 +253,27 @@ function AuthForm() {
   // login: try by itself once phone + PIN look complete (register still needs the button)
   useAutoSubmit(`${phone}|${pin}`, mode === 'login' && phone.replace(/\D/g, '').length >= 9 && pin.length >= 4, submit, 800)
   if (gProfile) return <GoogleProfile g={gProfile} onCancel={() => setGProfile(null)} />
+  const login = shop?.login || {}
+  const phone1st = login.wa || login.tg
   return (
     <div className="mx-auto max-w-md px-4 pt-10">
       <div className="text-center">
         <span className="mx-auto grid size-16 place-items-center rounded-3xl bg-cheese"><UserRound className="size-8" /></span>
-        <h1 className="mt-4 font-display text-4xl tracking-wide">{mode === 'login' ? 'Log masuk' : 'Daftar akaun'}</h1>
+        <h1 className="mt-4 font-display text-4xl tracking-wide">{phone1st || mode === 'login' ? 'Log masuk' : 'Daftar akaun'}</h1>
         <p className="mt-1 text-[14px] text-muted">Jejak semua pesanan anda dan simpan alamat untuk order seterusnya.</p>
       </div>
       <div className="card mt-6 p-5">
+        {phone1st && <PhoneLogin login={login} />}
+        {phone1st && shop?.googleClientId && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> atau <span className="h-px flex-1 bg-line" /></div>}
         {shop?.googleClientId && (
           <>
             <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} />
             {gErr && <p className="mt-2 text-center text-[13px] font-semibold text-tomato">{gErr}</p>}
-            <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> atau guna no. telefon + PIN <span className="h-px flex-1 bg-line" /></div>
           </>
         )}
+        {/* phone + PIN stays only until the shop connects WhatsApp login */}
+        {!login.wa && (shop?.googleClientId || phone1st) && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> atau guna no. telefon + PIN <span className="h-px flex-1 bg-line" /></div>}
+        {!login.wa && <>
         <div className="grid grid-cols-2 gap-1 rounded-full bg-cream p-1" role="tablist">
           {[['login', 'Log masuk'], ['register', 'Daftar baru']].map(([id, l]) => (
             <button key={id} role="tab" aria-selected={mode === id} onClick={() => (setMode(id), setErr(''))}
@@ -155,6 +303,7 @@ function AuthForm() {
           </button>
         </form>
         {mode === 'login' && <p className="mt-3 text-center text-[12.5px] text-muted">Lupa PIN? WhatsApp kedai dan kami akan bantu.</p>}
+        </>}
       </div>
     </div>
   )

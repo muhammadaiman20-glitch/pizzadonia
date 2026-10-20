@@ -8,6 +8,7 @@ import { tgDelivery, tgSend } from './telegram.js'
 import { AI_MODELS, aiModel } from './workers-ai.js'
 import { COMMANDS, HOOK_UPDATES, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from './telegram-bot.js'
 import { DEFAULT_OPS_MODEL, PLAN_TTL, healthText, opsModel } from './ops-assistant.js'
+import { LOGIN_TTL, WA_WEBHOOK_PATH, loginCode, waApi, waMessages, waSigned, waText } from './whatsapp.js'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -83,6 +84,9 @@ const SETTINGS_SEED = {
   // dashboard, chat linked by /start <code>).
   telegram: { enabled: true, payments: true, orders: true, support: true,
     botToken: '', bot: null, webhookSecret: '', chatId: '', chat: null, link: null, blockedAt: '' },
+  // customer login by WhatsApp: the shop's WhatsApp Cloud API number (Meta). Customers send their login code to it.
+  // Token + app secret are pasted on the dashboard and never leave the server. number = digits for wa.me links.
+  waLogin: { phoneNumberId: '', wabaId: '', token: '', appSecret: '', verifyToken: '', number: '', name: '' },
   riderKeepsFee: true, // COD: the rider keeps the delivery fee and banks in the rest (pizza money) to the owner
 }
 
@@ -96,6 +100,7 @@ settings.welcome = { ...SETTINGS_SEED.welcome, ...settings.welcome }
 settings.aiChat = { enabled: settings.aiChat?.enabled !== false, model: aiModel(settings.aiChat?.model) }
 settings.telegram = { ...SETTINGS_SEED.telegram, ...settings.telegram }
 settings.opsAi = { enabled: settings.opsAi?.enabled !== false, model: opsModel(settings.opsAi?.model) }
+settings.waLogin = { ...SETTINGS_SEED.waLogin, ...settings.waLogin }
 // fire-and-forget Telegram message for one kind of event (payments | orders | support)
 // which bot + chat alerts go to ('' chat until the owner taps Start - then nothing is sent)
 function tgCreds() {
@@ -284,6 +289,7 @@ function cleanSizes(list) {
 const publicShop = () => ({
   shopName: settings.shopName, open: settings.open, whatsapp: settings.whatsapp, minOrder: settings.minOrder,
   shop: settings.shop, delivery: settings.delivery, menu: publicMenu(), payment: publicPayment(), googleClientId: settings.googleClientId || '',
+  login: { wa: waReady(), tg: tgLoginReady() }, // phone login channels; WhatsApp on = no more PIN login
   welcome: settings.welcome.active && settings.welcome.amount > 0 ? { amount: settings.welcome.amount, minOrder: settings.welcome.minOrder } : null,
   cashback: cashbackLive() ? { percent: settings.cashback.percent, end: settings.cashback.end, minOrder: settings.cashback.minOrder, maxPerOrder: settings.cashback.maxPerOrder, exclude: settings.cashback.exclude || [] } : null,
 })
@@ -468,7 +474,8 @@ app.use((req, _res, next) => {
   }
   next()
 })
-app.use(express.json({ limit: '64kb' }))
+// rawBody: the WhatsApp webhook checks Meta's signature over the exact bytes
+app.use(express.json({ limit: '64kb', verify: (req, _res, buf) => { req.rawBody = buf } }))
 
 app.get('/api/shop', (_req, res) => res.json(publicShop()))
 
@@ -666,6 +673,103 @@ app.post('/api/account/login', (req, res) => {
   }
   res.json({ token: newSession(phone), ...accountView(phone, acc) })
 })
+// ---- phone login by WhatsApp or Telegram (no PIN). The page asks for a code; the customer sends it from their own
+// WhatsApp, or opens the bot and shares their Telegram contact. Either way the phone number comes from WhatsApp /
+// Telegram, not from what was typed. The page polls GET /api/account/phone-login/:id and signs in by itself.
+// The id is the browser's secret; the 6-digit code alone can't sign anyone in.
+const waReady = () => Boolean(settings.waLogin.token && settings.waLogin.phoneNumberId && settings.waLogin.appSecret && settings.waLogin.number)
+const tgLoginReady = () => Boolean(settings.telegram.botToken && settings.telegram.bot?.username)
+const showPhone = (p) => '0' + String(p).replace(/^60/, '')
+function phoneLogins() {
+  const p = load('phone-logins.json', { reqs: {}, seen: [], lastInboundAt: 0 })
+  for (const [k, v] of Object.entries(p.reqs)) if (v.exp < Date.now()) delete p.reqs[k]
+  return p
+}
+const savePhoneLogins = (p) => save('phone-logins.json', p)
+const waitingLogin = (p, channel, code) => Object.values(p.reqs).find((r) => r.channel === channel && r.code === code && !r.phone)
+// the phone is proven: the page picks it up on its next poll (fresh 10 minutes to type a name if the account is new)
+function provePhone(p, r, phone, tgId) {
+  Object.assign(r, { phone, exp: Date.now() + LOGIN_TTL }, tgId ? { tgId } : {})
+  savePhoneLogins(p)
+}
+app.post('/api/account/phone-login', (req, res) => {
+  const channel = req.body?.channel === 'tg' ? 'tg' : 'wa'
+  if (channel === 'wa' ? !waReady() : !tgLoginReady())
+    return res.status(400).json({ error: `Log masuk ${channel === 'wa' ? 'WhatsApp' : 'Telegram'} belum diaktifkan oleh kedai.` })
+  if (limited('plogin:' + req.ip, 10)) return res.status(429).json({ error: 'Terlalu banyak cubaan. Cuba lagi dalam beberapa minit.' })
+  hit('plogin:' + req.ip)
+  const p = phoneLogins()
+  let code
+  do code = String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+  while (Object.values(p.reqs).some((r) => r.code === code))
+  const id = crypto.randomBytes(18).toString('base64url')
+  p.reqs[id] = { id, channel, code, exp: Date.now() + LOGIN_TTL }
+  savePhoneLogins(p)
+  const links = channel === 'wa'
+    ? { web: `https://wa.me/${settings.waLogin.number}?text=${encodeURIComponent(`Kod log masuk ${settings.shopName}: ${code}`)}` }
+    : linkUrls(settings.telegram.bot.username, 'L' + code)
+  res.json({ id, channel, code, exp: p.reqs[id].exp, ...links })
+})
+function finishPhoneLogin(p, r, res) {
+  const acc = customers.accounts[r.phone]
+  delete p.reqs[r.id]
+  savePhoneLogins(p)
+  if (acc.blocked) return res.status(403).json({ error: 'Akaun ini disekat. Sila hubungi kedai.' })
+  if (r.tgId) acc.telegram = { id: r.tgId, linkedAt: new Date().toISOString() } // next time: no contact sharing needed
+  acc.lastLogin = new Date().toISOString()
+  res.json({ token: newSession(r.phone), ...accountView(r.phone, acc) })
+}
+app.get('/api/account/phone-login/:id', (req, res) => {
+  const p = phoneLogins()
+  const r = p.reqs[req.params.id]
+  if (!r) return res.status(410).json({ error: 'Kod sudah tamat. Tekan butang log masuk sekali lagi.', expired: true })
+  if (!r.phone) return res.json({ state: 'waiting', exp: r.exp })
+  if (!customers.accounts[r.phone]) return res.json({ state: 'needName', phone: r.phone, exp: r.exp })
+  finishPhoneLogin(p, r, res)
+})
+// a new number: one name, then signed in
+app.post('/api/account/phone-login/:id/name', (req, res) => {
+  const p = phoneLogins()
+  const r = p.reqs[req.params.id]
+  if (!r?.phone) return res.status(410).json({ error: 'Kod sudah tamat. Tekan butang log masuk sekali lagi.', expired: true })
+  if (!customers.accounts[r.phone]) {
+    const name = clean(req.body?.name, 60)
+    if (name.length < 2) return res.status(400).json({ error: 'Sila isi nama anda' })
+    customers.accounts[r.phone] = { name, salt: '', pin: '', addresses: [], createdAt: new Date().toISOString() }
+  }
+  finishPhoneLogin(p, r, res)
+})
+// Telegram half: "/start L<code>" opens a login; the customer's own shared contact proves the number.
+// A Telegram account that logged in before skips the contact step.
+async function tgLogin(m, code) {
+  const t = settings.telegram
+  const site = siteBase()
+  const from = String(m.from?.id || '')
+  const send = (text, markup) => tgApi(t.botToken, 'sendMessage', { chat_id: m.chat.id, text, disable_web_page_preview: true, reply_markup: markup || { remove_keyboard: true } })
+  const again = `Tekan "Log masuk dengan Telegram" di laman ${settings.shopName} sekali lagi.`
+  const p = phoneLogins()
+  const proven = (r, phone) => {
+    provePhone(p, r, phone, from)
+    return send(`✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site + '/#/akaun' : ''}`)
+  }
+  if (code) {
+    const r = waitingLogin(p, 'tg', code)
+    if (!r) return send(`⚠️ Pautan log masuk ini sudah tamat. ${again}`)
+    const known = Object.entries(customers.accounts).find(([, a]) => a.telegram?.id === from)
+    if (known) return proven(r, known[0])
+    r.tgFrom = from
+    savePhoneLogins(p)
+    return send('Satu langkah lagi: tekan butang di bawah untuk kongsi nombor telefon anda.\nKami guna nombor ini untuk log masuk dan penghantaran sahaja.',
+      { keyboard: [[{ text: '📱 Kongsi nombor telefon saya', request_contact: true }]], resize_keyboard: true, one_time_keyboard: true })
+  }
+  // a shared contact: must be the sender's own (someone else's contact card proves nothing)
+  if (String(m.contact.user_id || '') !== from) return send('⚠️ Sila kongsi nombor anda sendiri dengan butang "Kongsi nombor telefon saya".')
+  const r = Object.values(p.reqs).filter((x) => x.channel === 'tg' && x.tgFrom === from && !x.phone).sort((a, b) => b.exp - a.exp)[0]
+  if (!r) return send(`⚠️ Tiada log masuk yang menunggu. ${again}`)
+  const phone = normPhone(m.contact.phone_number)
+  if (!phone) return send('Maaf, hanya nombor telefon Malaysia boleh log masuk.')
+  return proven(r, phone)
+}
 app.get('/api/account', (req, res) => {
   const a = accountOf(req)
   if (!a) return res.status(401).json({ error: 'Sila log masuk' })
@@ -1429,7 +1533,9 @@ app.delete('/api/admin/payment-qr', admin, adminTx, (_req, res) => {
 function settingsView(extra = {}) {
   // the bot token, webhook secret and link code never leave the server
   const { botToken, webhookSecret, link, ...telegram } = settings.telegram
-  return { ...settings, telegram: { ...telegram, hasToken: Boolean(botToken) }, telegramReady: tgReady(), telegramMode: tgCreds().mode, menu, ...extra }
+  const { token: _token, appSecret: _secret, verifyToken: _verify, ...waLogin } = settings.waLogin // same for WhatsApp
+  return { ...settings, telegram: { ...telegram, hasToken: Boolean(botToken) }, waLogin: { ...waLogin, connected: waReady() },
+    telegramReady: tgReady(), telegramMode: tgCreds().mode, menu, ...extra }
 }
 app.get('/api/admin/settings', admin, (req, res) => res.json(settingsView({ me: req.adminEmail || null })))
 app.put('/api/admin/settings', admin, (req, res) => {
@@ -1721,6 +1827,9 @@ async function onTelegramUpdate(u) {
   const site = siteBase()
   const reply = (text, buttons) => tgApi(t.botToken, 'sendMessage', { chat_id: m.chat.id, text, disable_web_page_preview: true, ...(buttons ? { reply_markup: { inline_keyboard: buttons } } : {}) })
   const isOwner = Boolean(t.chatId) && String(m.chat.id) === t.chatId
+  // customer login (t.me/<bot>?start=L<code>, then the shared contact) - checked first: the owner may log in too
+  const loginStart = c?.cmd === 'start' ? /^L(\d{6})$/.exec(c.arg) : null
+  if (loginStart || m.contact) return firstTime(u.update_id) ? tgLogin(m, loginStart?.[1]) : undefined
   if (c?.cmd === 'start' && c.arg) {
     if (t.link && t.link.exp > Date.now() && sameSecret(c.arg, t.link.code)) {
       t.chatId = String(m.chat.id)
@@ -1753,7 +1862,7 @@ async function onTelegramUpdate(u) {
     return reply(ownerStatusText() + (settings.opsAi.enabled ? '\n\n🤖 Tanya saya apa sahaja dalam ayat biasa, cth: "kenapa notifikasi tak masuk?" atau "tutup kedai".' : ''), ownerKeyboard(site))
   }
   // anyone else who finds the bot: point them to the shop
-  return reply(`🍕 ${settings.shopName}\nBot ini menghantar notifikasi kepada pemilik kedai. Untuk membuat pesanan, tekan butang di bawah.`,
+  return reply(`🍕 ${settings.shopName}\nBot ini untuk log masuk pelanggan dan notifikasi pemilik kedai. Untuk membuat pesanan, tekan butang di bawah.`,
     site ? [[{ text: '🛒 Buka Kedai', web_app: { url: site } }]] : null)
 }
 app.post(WEBHOOK_PATH, async (req, res) => {
@@ -1848,6 +1957,88 @@ app.post('/api/admin/telegram-test', admin, async (_req, res) => {
   if (!c.chat) return res.status(400).json({ error: c.mode === 'own' ? 'Connect your Telegram chat first (tap Start in the bot).' : 'Add your Telegram bot first.' })
   const r = await tgSend(`🍕 ${settings.shopName}: notifikasi Telegram berfungsi! Anda akan dapat mesej bila pelanggan buat pesanan atau bayaran.`, null, undefined, ownerKeyboard(siteBase()), c)
   res.status(r.ok ? 200 : 502).json(r)
+})
+
+// ---- WhatsApp half of the phone login (whatsapp.js). Meta checks the address once with GET (verify token), then
+// POSTs each message the customer sends to the shop's WhatsApp number, signed with the app secret.
+app.get(WA_WEBHOOK_PATH, (req, res) => {
+  const w = settings.waLogin
+  if (req.query['hub.mode'] !== 'subscribe' || !sameSecret(String(req.query['hub.verify_token'] || ''), w.verifyToken)) return res.status(403).json({ error: 'Not allowed' })
+  res.type('text/plain').send(String(req.query['hub.challenge'] || ''))
+})
+app.post(WA_WEBHOOK_PATH, express.raw({ type: () => true, limit: '64kb' }), async (req, res) => {
+  const w = settings.waLogin
+  // cloud: the body arrives as bytes; local express already parsed it and kept the bytes in rawBody
+  const raw = Buffer.isBuffer(req.body) ? req.body : req.rawBody
+  if (!waReady() || !waSigned(w.appSecret, raw, req.get('x-hub-signature-256'))) return res.status(401).json({ error: 'Not allowed' })
+  try {
+    const body = Buffer.isBuffer(req.body) ? JSON.parse(raw.toString('utf8')) : req.body
+    for (const m of waMessages(body)) await onWhatsAppMessage(m)
+  } catch (e) {
+    console.log(`[whatsapp] message failed: ${e.message}`)
+  }
+  res.json({ ok: true }) // always 200, or Meta keeps re-sending
+})
+async function onWhatsAppMessage(m) {
+  const p = phoneLogins()
+  if (!m.id || p.seen.includes(m.id)) return // Meta may deliver the same message twice
+  p.seen = [...p.seen, m.id].slice(-100)
+  p.lastInboundAt = Date.now()
+  const code = loginCode(m.text)
+  const r = code && waitingLogin(p, 'wa', code)
+  const phone = normPhone(m.from)
+  const site = siteBase()
+  let text = ''
+  if (r && phone) {
+    provePhone(p, r, phone)
+    text = `✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site + '/#/akaun' : ''}`
+  } else {
+    savePhoneLogins(p)
+    // a few replies per sender, so a stuck phone or a script can't make us send forever
+    if (limited('wa-reply:' + m.from, 5)) return
+    hit('wa-reply:' + m.from)
+    if (r) text = 'Maaf, hanya nombor telefon Malaysia boleh log masuk.'
+    else if (code) text = `⚠️ Kod ini sudah tamat atau tidak sah. Tekan "Log masuk dengan WhatsApp" di laman ${settings.shopName} sekali lagi.`
+    else text = `🍕 ${settings.shopName}\nNombor ini untuk kod log masuk sahaja.${site ? `\nOrder di ${site}` : ''}${settings.whatsapp ? `\nUntuk bertanya, WhatsApp kedai: https://wa.me/${settings.whatsapp}` : ''}`
+  }
+  const sent = await waText(settings.waLogin, m.from, text)
+  if (!sent.ok) console.log(`[whatsapp] reply failed: ${sent.error}`)
+}
+// WhatsApp login card on Shop & fees. The token and app secret never leave the server.
+app.get('/api/admin/whatsapp', admin, (_req, res) => {
+  const w = settings.waLogin
+  res.json({ connected: waReady(), number: w.number, name: w.name, phoneNumberId: w.phoneNumberId, wabaId: w.wabaId,
+    webhookUrl: siteBase() + WA_WEBHOOK_PATH, verifyToken: w.verifyToken, lastInboundAt: phoneLogins().lastInboundAt || 0, telegram: tgLoginReady() })
+})
+// save / replace the keys: checked with Meta first. Blank token or secret = keep the saved one.
+app.post('/api/admin/whatsapp', admin, adminTx, async (req, res) => {
+  const b = req.body || {}
+  const w = settings.waLogin
+  const phoneNumberId = String(b.phoneNumberId ?? w.phoneNumberId).replace(/\D/g, '')
+  const wabaId = String(b.wabaId ?? w.wabaId).replace(/\D/g, '')
+  const token = String(b.token || '').trim() || w.token
+  const appSecret = String(b.appSecret || '').trim() || w.appSecret
+  if (!/^\d{6,25}$/.test(phoneNumberId)) return res.status(400).json({ error: 'Phone number ID is the long number under WhatsApp → API Setup (not the phone number itself).' })
+  if (!/^\S{20,600}$/.test(token)) return res.status(400).json({ error: 'Paste the permanent access token from your System user.' })
+  if (!/^[0-9a-f]{32}$/i.test(appSecret)) return res.status(400).json({ error: 'App secret is 32 letters and numbers: App settings → Basic → App secret → Show.' })
+  if (!/^https:\/\//.test(siteBase())) return res.status(400).json({ error: 'The shop needs its public https link first (Meta only talks to https).' })
+  const me = await waApi(token, 'GET', `${phoneNumberId}?fields=display_phone_number,verified_name`)
+  if (!me.ok) return res.status(400).json({ error: `Meta: ${me.error}` })
+  const number = String(me.result.display_phone_number || '').replace(/\D/g, '')
+  if (!number) return res.status(400).json({ error: 'Meta did not return a phone number for this ID.' })
+  // makes Meta deliver this business account's messages to the app (and so to our webhook)
+  const subscribed = wabaId ? (await waApi(token, 'POST', `${wabaId}/subscribed_apps`)).ok : null
+  Object.assign(w, { phoneNumberId, wabaId, token, appSecret, number, name: clean(me.result.verified_name, 80),
+    verifyToken: w.verifyToken || crypto.randomBytes(18).toString('base64url') })
+  save('settings.json', settings)
+  console.log(`[whatsapp] login number set +${number}`)
+  res.json({ ok: true, number, name: w.name, subscribed })
+})
+// switch WhatsApp login off (customers then see the Telegram / PIN login again)
+app.delete('/api/admin/whatsapp', admin, adminTx, (_req, res) => {
+  Object.assign(settings.waLogin, { token: '', appSecret: '', number: '', name: '' })
+  save('settings.json', settings)
+  res.json({ ok: true })
 })
 
 // health checks for /check and the AI helper's check_health tool. level: error = customers or alerts are affected,
