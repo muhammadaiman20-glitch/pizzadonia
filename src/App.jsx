@@ -8,11 +8,12 @@ import Admin from './pages/Admin.jsx'
 import Account from './pages/Account.jsx'
 import Staff from './pages/Staff.jsx'
 import Wallet from './pages/Wallet.jsx'
+import TgBridge from './pages/TgBridge.jsx'
 
 export default function App() {
   const { path } = useRoute()
   const { shop } = useShop()
-  const staffPage = ['/admin', '/dapur', '/rider'].includes(path)
+  const staffPage = ['/admin', '/dapur', '/rider', '/tg'].includes(path)
   return (
     <>
       {shop?.offline && (
@@ -32,6 +33,7 @@ function Page() {
   if (path === '/checkout') return <Checkout />
   if (path.startsWith('/order/')) return <OrderStatus id={decodeURIComponent(path.slice(7))} token={query.get('t') || ''} />
   if (path === '/admin') return <Admin />
+  if (path === '/tg') return <TgBridge />
   if (path === '/akaun') return <Account />
   if (path === '/dompet') return <Wallet />
   if (path === '/dapur') return <Staff key="kitchen" role="kitchen" />

@@ -109,6 +109,39 @@ await test('Telegram bot: token, /start link, alerts, status, unlink', async () 
     await update(fromChat(999, `/start ${code}`))
     assert.equal((await call('/api/admin/telegram')).data.chat.name, 'Aiman Test')
 
+    // Menu buttons: shop for everyone, seller dashboard (/#/tg) for the linked owner chat; "Seller dashboard" opens in Telegram
+    const menus = calls.filter((c) => c.method === 'setChatMenuButton')
+    assert.ok(menus.some((c) => c.body.chat_id === undefined && c.body.menu_button.web_app.url === 'https://pizzadonia.pages.dev'))
+    assert.ok(menus.some((c) => c.body.chat_id === 777 && c.body.menu_button.web_app.url === 'https://pizzadonia.pages.dev/#/tg'))
+    assert.ok(lastTo(777).reply_markup.inline_keyboard.flat().some((b) => b.web_app?.url === 'https://pizzadonia.pages.dev/#/tg'))
+    const before = calls.filter((c) => c.method === 'setChatMenuButton').length
+    await update(fromChat(777, '/status'))
+    assert.equal(calls.filter((c) => c.method === 'setChatMenuButton').length, before) // set once, not on every update
+
+    // the Mini App trades Telegram's signed initData for an owner session - only for the linked owner, never forged
+    const initFor = (id, auth = Math.floor(Date.now() / 1000), token = TOKEN) => {
+      const fields = { auth_date: String(auth), query_id: 'AAE1', user: JSON.stringify({ id, first_name: 'Aiman' }) }
+      const check = Object.keys(fields).sort().map((k) => `${k}=${fields[k]}`).join('\n')
+      const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest()
+      return new URLSearchParams({ ...fields, hash: crypto.createHmac('sha256', secret).update(check).digest('hex') }).toString()
+    }
+    const appSession = (initData, ip = '198.51.100.20') => call('/api/telegram/app-session', { method: 'POST', owner: false, body: { initData }, headers: { 'CF-Connecting-IP': ip } })
+    r = await appSession(initFor(777))
+    assert.equal(r.status, 200, JSON.stringify(r.data))
+    const tgOwner = await mf.dispatchFetch('https://pizzadonia.pages.dev/api/admin/telegram', { headers: { 'CF-Connecting-IP': '198.51.100.20', 'x-admin-session': r.data.session } })
+    assert.equal(tgOwner.status, 200)                                                                    // the session opens the seller API
+    assert.equal((await appSession(initFor(31337))).status, 403)                                        // a customer's Telegram
+    assert.equal((await appSession(initFor(777, Math.floor(Date.now() / 1000) - 7200))).status, 403)    // older than 1 hour
+    assert.equal((await appSession(initFor(777, undefined, '999:other-bot-token-other-bot-token-x'))).status, 403) // another bot
+    assert.equal((await appSession(initFor(777).replace('%22id%22%3A777', '%22id%22%3A778'))).status, 403) // tampered
+    assert.equal((await appSession('')).status, 403)
+    // money actions still need the transaction PIN with this session
+    const pay = await mf.dispatchFetch('https://pizzadonia.pages.dev/api/admin/orders/PZ-0001/payment', { method: 'POST', headers: { 'CF-Connecting-IP': '198.51.100.20', 'x-admin-session': r.data.session, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'paid' }) })
+    assert.equal(pay.status, 428)
+    // brute force is throttled per IP
+    for (let i = 0; i < 10; i++) await appSession('auth_date=1&hash=00', '203.0.113.9')
+    assert.equal((await appSession(initFor(777), '203.0.113.9')).status, 429)
+
     // owner commands + strangers
     await update(fromChat(777, '/status'))
     assert.match(lastTo(777).text, /Hari ini: 0 pesanan/)

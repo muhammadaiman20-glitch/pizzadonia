@@ -715,7 +715,7 @@ async function tgLogin(m, code) {
   const p = phoneLogins()
   const proven = (r, phone) => {
     provePhone(p, r, phone, from)
-    return send(`✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site : ''}`)
+    return send(`✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site + '/#/akaun' : ''}`)
   }
   if (code) {
     const r = waitingLogin(p, 'tg', code)
@@ -1786,6 +1786,7 @@ async function onTelegramUpdate(u) {
       t.blockedAt = ''
       save('settings.json', settings)
       console.log(`[telegram] linked to ${t.chat.name}`)
+      await tgMenus() // this chat's Menu now opens the seller dashboard
       return reply(`✅ Bersambung dengan ${settings.shopName}!\n\nNotifikasi pesanan, bayaran dan chat pelanggan akan masuk ke sini.\nHantar /status bila-bila masa untuk ringkasan kedai.`, ownerKeyboard(site))
     }
     if (!isOwner) return reply('⚠️ Pautan sambungan ini sudah tamat atau telah digunakan.\nBuka dashboard seller → Shop & fees → Telegram, kemudian tekan "Connect Telegram" sekali lagi.')
@@ -1813,10 +1814,64 @@ async function onTelegramUpdate(u) {
   return reply(`🍕 ${settings.shopName}\nBot ini untuk log masuk pelanggan dan notifikasi pemilik kedai. Untuk membuat pesanan, tekan butang di bawah.`,
     site ? [[{ text: '🛒 Buka Kedai', web_app: { url: site } }]] : null)
 }
+// ---- Menu button Mini App. Customers' Menu opens the shop; the owner's Menu (and the "Seller dashboard" button)
+// opens /#/tg inside Telegram, which trades Telegram's signed initData for an owner session - Google sign-in
+// doesn't work in Telegram's in-app browser. Money actions still ask for the transaction PIN as usual.
+const TG_MENU_VERSION = '1' // bump to push new Menu buttons to Telegram
+const TG_APP_SESSION = 12 * 3600 * 1000
+/** Telegram Mini App initData check (core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app) */
+function tgInitUser(initData, token, maxAgeS = 3600) {
+  if (!initData || !token || String(initData).length > 4096) return null
+  const p = new URLSearchParams(String(initData))
+  const hash = p.get('hash') || ''
+  p.delete('hash')
+  const check = [...p.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join('\n')
+  const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest()
+  const good = crypto.createHmac('sha256', secret).update(check).digest('hex')
+  if (!sameSecret(hash, good) || Date.now() / 1000 - Number(p.get('auth_date') || 0) > maxAgeS) return null
+  try {
+    const user = JSON.parse(p.get('user') || 'null')
+    return Number.isInteger(user?.id) ? user : null
+  } catch {
+    return null
+  }
+}
+/** Menu buttons: shop for everyone, seller dashboard for the linked owner chat. Never throws. */
+async function tgMenus() {
+  const t = settings.telegram
+  const site = siteBase()
+  if (!t.botToken || !/^https:\/\//.test(site)) return false
+  const shop = await tgApi(t.botToken, 'setChatMenuButton', { menu_button: { type: 'web_app', text: 'Menu', web_app: { url: site } } })
+  const owner = t.chatId ? await tgApi(t.botToken, 'setChatMenuButton', { chat_id: Number(t.chatId), menu_button: { type: 'web_app', text: 'Menu', web_app: { url: `${site}/#/tg` } } }) : { ok: true }
+  if (!shop.ok || !owner.ok) return false
+  t.menuVer = `${TG_MENU_VERSION}|${t.chatId || ''}|${site}`
+  save('settings.json', settings)
+  return true
+}
+// the owner opened the Mini App: Telegram signed who they are -> a 12-hour owner session for this phone
+app.post('/api/telegram/app-session', (req, res) => {
+  const t = settings.telegram
+  const key = 'tgapp:' + req.ip
+  if (limited(key, 10) || limited('tgapp:all', 50)) return res.status(429).json({ error: 'Terlalu banyak cubaan. Tunggu 10 minit.' })
+  const user = tgInitUser(req.body?.initData, t.botToken)
+  if (!user || !t.chatId || String(user.id) !== t.chatId || !settings.adminEmails.length) {
+    hit(key)
+    hit('tgapp:all')
+    return res.status(403).json({ error: 'Hanya pemilik kedai (chat Telegram yang disambungkan) boleh buka dashboard seller di sini.' })
+  }
+  const token = crypto.randomBytes(24).toString('hex')
+  const now = Date.now()
+  for (const [k, v] of Object.entries(adminSessions)) if (v.exp < now) delete adminSessions[k]
+  adminSessions[token] = { email: settings.adminEmails[0], exp: now + TG_APP_SESSION, via: 'telegram-app' }
+  saveAdminSessions()
+  res.json({ session: token })
+})
 app.post(WEBHOOK_PATH, async (req, res) => {
   const t = settings.telegram
   if (!t.botToken || !sameSecret(String(req.get('x-telegram-bot-api-secret-token') || ''), t.webhookSecret)) return res.status(401).json({ error: 'Not allowed' })
   try {
+    // once per Menu version / owner chat / site: point the Menu buttons at the shop and the seller dashboard
+    if (t.menuVer !== `${TG_MENU_VERSION}|${t.chatId || ''}|${siteBase()}`) await tgMenus()
     await onTelegramUpdate(req.body || {})
   } catch (e) {
     console.log(`[telegram] update failed: ${e.message}`)
@@ -1874,6 +1929,7 @@ app.post('/api/admin/telegram/bot', admin, adminTx, async (req, res) => {
   Object.assign(t, { botToken: token, webhookSecret: secret, bot: { id: me.result.id, username: me.result.username, name: me.result.first_name }, link: null },
     sameBot ? {} : { chatId: '', chat: null, blockedAt: '' }) // a different bot can't message the old chat
   save('settings.json', settings)
+  await tgMenus()
   console.log(`[telegram] bot set @${me.result.username}`)
   res.json({ ok: true, bot: t.bot })
 })
@@ -1939,7 +1995,7 @@ async function onWhatsAppMessage(m) {
   let text = ''
   if (r && phone) {
     provePhone(p, r, phone)
-    text = `✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site : ''}`
+    text = `✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site + '/#/akaun' : ''}`
   } else {
     savePhoneLogins(p)
     // a few replies per sender, so a stuck phone or a script can't make us send forever
