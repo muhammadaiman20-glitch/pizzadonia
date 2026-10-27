@@ -6,6 +6,7 @@ import { createCloudApp } from './runtime/app.js'
 import { permanentFailure, tgApi } from '../telegram-bot.js'
 import { opsModel, runOpsTurn } from '../ops-assistant.js'
 import { aiModel, aiText } from '../workers-ai.js'
+import { claudeGenerate, claudeOps } from '../claude.js'
 
 const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 const safeEqual = (a, b) => {
@@ -58,7 +59,15 @@ export class PizzadoniaShop extends DurableObject {
           headers: { 'x-admin-session': job.session, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }))
         return { status: r.status, data: await r.json().catch(() => null) }
       }
-      const ai = this.env.AI ? (messages, tools, model) => this.env.AI.run(opsModel(model), { messages, tools, max_tokens: 1500, temperature: 0.2 }) : null
+      // Claude first (ANTHROPIC_API_KEY), the dashboard's Workers AI model when Claude fails or has no key
+      const workersAi = this.env.AI ? (messages, tools, model) => this.env.AI.run(opsModel(model), { messages, tools, max_tokens: 1500, temperature: 0.2 }) : null
+      const ai = this.env.ANTHROPIC_API_KEY ? async (messages, tools, model) => {
+        try { return await claudeOps(this.env, messages, tools) } catch (e) {
+          console.warn(JSON.stringify({ event: 'claude_ops_fallback', message: String(e.message).slice(0, 200) }))
+          if (!workersAi) throw e
+          return workersAi(messages, tools, model)
+        }
+      } : workersAi
       try { await runOpsTurn(job, { ai, api, tg: (method, body) => tgApi(job.token, method, body, 15000) }) }
       catch (e) {
         console.error(JSON.stringify({ event: 'ops_error', message: e.message }))
@@ -117,7 +126,14 @@ export class PizzadoniaShop extends DurableObject {
       return { ok: true, queued: true }
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
-    const aiGenerate = this.env.AI ? async (messages, model) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: 300, temperature: 0.3 })) : null
+    const workersGenerate = this.env.AI ? async (messages, model) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: 300, temperature: 0.3 })) : null
+    const aiGenerate = this.env.ANTHROPIC_API_KEY ? async (messages, model) => {
+      try { return await claudeGenerate(this.env, messages) } catch (e) {
+        console.warn(JSON.stringify({ event: 'claude_chat_fallback', message: String(e.message).slice(0, 200) }))
+        if (!workersGenerate) throw e
+        return workersGenerate(messages, model)
+      }
+    } : workersGenerate
     const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) } })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
