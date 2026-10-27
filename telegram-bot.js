@@ -7,8 +7,12 @@ export const WEBHOOK_PATH = '/api/telegram/webhook'
 export const COMMANDS = [
   { command: 'start', description: 'Status kedai & butang pantas' },
   { command: 'status', description: 'Pesanan hari ini & yang perlu tindakan' },
+  { command: 'check', description: 'Semakan kesihatan kedai & sistem' },
+  { command: 'reset', description: 'Mula perbualan baru dengan pembantu AI' },
   { command: 'stop', description: 'Berhenti terima notifikasi di chat ini' },
 ]
+// callback_query = the Confirm / Cancel buttons under the AI helper's change plans
+export const HOOK_UPDATES = ['message', 'callback_query', 'my_chat_member']
 
 /** one Bot API call; never throws - returns { ok, result } or { ok: false, error, code } */
 export async function tgApi(token, method, body, timeout = 10000) {
@@ -42,12 +46,15 @@ export function parseCommand(text) {
 export const chatLabel = (chat = {}) =>
   [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.title || (chat.username ? '@' + chat.username : `Chat ${chat.id}`)
 
-/** shortcuts under owner messages: shop / kitchen / rider open inside Telegram, seller in the browser (Google sign-in) */
+/**
+ * shortcuts under owner messages, all opening inside Telegram. The seller dashboard goes through /#/tg, which signs
+ * the owner in with Telegram's signed initData (Google sign-in doesn't work in Telegram's in-app browser).
+ */
 export function ownerKeyboard(site) {
   if (!site) return null
   return [
+    [{ text: '🧑‍💼 Seller dashboard', web_app: { url: `${site}/#/tg` } }],
     [{ text: '🛒 Buka Kedai', web_app: { url: site } }],
     [{ text: '🍳 Dapur', web_app: { url: `${site}/#/dapur` } }, { text: '🛵 Rider', web_app: { url: `${site}/#/rider` } }],
-    [{ text: '🧑‍💼 Seller dashboard', url: `${site}/#/admin` }],
   ]
 }
