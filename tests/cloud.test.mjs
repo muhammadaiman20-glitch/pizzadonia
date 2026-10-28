@@ -34,10 +34,13 @@ await test('Cloudflare persistence and complete business flows', async t => {
   }
   let mf = new Miniflare({ ...convertV4MiniflareOptions(options), resourcePersistencePath: path.join(dir,'storage') })
   const call = async (url, { method = 'GET', body, owner = false, headers = {} } = {}) => {
-    const r = await mf.dispatchFetch('https://pizzadonia.pages.dev'+url, { method,
+    const send = () => mf.dispatchFetch('https://pizzadonia.pages.dev'+url, { method,
       headers: { 'CF-Connecting-IP': '198.51.100.10', ...(owner ? { 'x-admin-session': session } : {}), ...(body && !Buffer.isBuffer(body) ? { 'Content-Type': 'application/json' } : {}), ...headers },
       body: body ? Buffer.isBuffer(body) ? body : JSON.stringify(body) : undefined,
     })
+    // Local workerd closes the keep-alive socket after a response that left a POST body unread
+    // (early 4xx), so the next request on it gets ECONNRESET before reaching the worker. Resend once.
+    const r = await send().catch(e => { if (e.cause?.code === 'ECONNRESET') return send(); throw e })
     return { status: r.status, data: r.headers.get('content-type')?.includes('application/json') ? await r.json() : Buffer.from(await r.arrayBuffer()) }
   }
   try {
