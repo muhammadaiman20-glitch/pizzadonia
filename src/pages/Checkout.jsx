@@ -379,7 +379,7 @@ export default function Checkout() {
       </div>
 
       {/* phone: fixed confirm bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-paper/95 px-4 pt-3 backdrop-blur lg:hidden" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+      <div className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-paper/95 px-4 pt-3 backdrop-blur lg:hidden">
         <div className="mb-2 flex items-baseline justify-between text-[14px]">
           <span className="text-muted">{missing || `Jumlah bayar (${method === 'transfer' ? 'pindahan' : method === 'wallet' ? 'dompet' : 'COD'})`}</span>
           <span className="text-[18px] font-extrabold text-tomato">{q?.ok ? rm(total) : rm(subtotal)}</span>

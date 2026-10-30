@@ -8,7 +8,7 @@ export function Header({ onCart, count }) {
   const { shop } = useShop()
   const acc = useAccount()
   return (
-    <header className="sticky top-0 z-40 border-b border-line/70 bg-cream/85 backdrop-blur-md">
+    <header className="safe-top sticky top-0 z-40 border-b border-line/70 bg-cream/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
         <Logo />
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -319,7 +319,7 @@ export default function Shop() {
 
       {/* sticky cart bar */}
       {count > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 px-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="safe-bottom fixed inset-x-0 bottom-0 z-40 px-3">
           <button
             onClick={() => setOpen(true)}
             className="rise mx-auto flex w-full max-w-xl items-center justify-between gap-3 rounded-full bg-ink py-2.5 pl-5 pr-2.5 text-white shadow-2xl"

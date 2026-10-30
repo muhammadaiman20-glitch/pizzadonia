@@ -20,6 +20,9 @@
 }
 
 html { -webkit-tap-highlight-color: transparent; }
+/* Phone status bar and gesture bar: the APK draws edge to edge, so bars must clear them (0 in a normal browser) */
+.safe-top { padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); }
+.safe-bottom { padding-bottom: max(0.75rem, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
 body {
   margin: 0;
   background: var(--color-cream);

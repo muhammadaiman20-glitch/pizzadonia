@@ -2125,7 +2125,7 @@ export default function Admin() {
   const TABS = [['orders', 'Orders', ClipboardList], ['account', 'Business account', PiggyBank], ['support', supportBadge ? `Support (${supportBadge})` : 'Support', Headset], ['customers', 'Customers', Users], ['money', 'Money', Landmark], ['wallets', 'Wallets & promo', Wallet], ['menu', 'Menu', UtensilsCrossed], ['settings', 'Shop & fees', Settings]]
   return (
     <div className="min-h-dvh pb-16">
-      <header className="sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
+      <header className="safe-top sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Logo small />
           <span className="rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">Seller</span>

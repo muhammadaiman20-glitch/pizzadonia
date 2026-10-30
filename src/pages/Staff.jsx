@@ -623,7 +623,7 @@ export default function Staff({ role }) {
   if (!pin) return <Login role={role} onOk={setPin} />
   return (
     <div className="min-h-dvh pb-16">
-      <header className="sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
+      <header className="safe-top sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-3">
           <Logo small />
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white"><R.Icon className="size-3.5" /> {R.title}</span>
