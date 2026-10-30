@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Loader2, LogOut, MapPin, MessageCircle, Package, Send, Trash2, UserRound, Wallet as WalletIcon } from 'lucide-react'
 import { Header } from './Shop.jsx'
-import { accountApi, api, go, ownerSession, prettyPhone, rm, store, useAccount, useAutoSubmit, useShop } from '../lib.js'
+import { accountApi, api, go, appRole, ownerSession, prettyPhone, rm, store, useAccount, useAutoSubmit, useShop } from '../lib.js'
 import { stepOf } from '../status.js'
 import GoogleButton from '../components/GoogleButton.jsx'
 import { PAY_STATUS } from '../components/PaymentPanel.jsx'
@@ -267,7 +267,7 @@ function AuthForm() {
         {phone1st && shop?.googleClientId && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> atau <span className="h-px flex-1 bg-line" /></div>}
         {shop?.googleClientId && (
           <>
-            <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} />
+            {!appRole && <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} />}
             {gErr && <p className="mt-2 text-center text-[13px] font-semibold text-tomato">{gErr}</p>}
           </>
         )}
@@ -345,7 +345,7 @@ export default function Account() {
             <button className="btn btn-ghost px-4 py-2 text-[13px]" onClick={() => accountApi.logout()}><LogOut className="size-4" /> Log keluar</button>
           </div>
 
-          {acc.owner && ownerSession.get() && (
+          {!appRole && acc.owner && ownerSession.get() && (
             <a href="#/admin" className="mt-6 flex items-center gap-4 rounded-[22px] bg-ink p-5 text-white transition hover:-translate-y-0.5">
               <UserRound className="size-8 text-cheese" />
               <div className="flex-1">

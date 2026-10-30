@@ -159,6 +159,7 @@ export class PizzadoniaShop extends DurableObject {
     const load = fs.load.bind(fs), save = fs.save.bind(fs)
     const hits = new Map(load('rate-limits.json', []).map(([k,v]) => [k,v.filter(t => t > Date.now()-3600000)]).filter(([,v]) => v.length))
     const googleTickets = new Map(load('google-tickets.json', []).filter(([,v]) => v.exp > Date.now()))
+    const appLoginCodes = new Map(load('app-login-codes.json', []).filter(([,v]) => v.exp > Date.now()))
     // Notifications use a persistent outbox. No fire-and-forget work can mutate a finished request.
     const outbox = load('outbox.json', [])
     // The shop's own bot + linked chat live in settings (Shop & fees -> Telegram).
@@ -170,7 +171,7 @@ export class PizzadoniaShop extends DurableObject {
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
     const aiGenerate = this.env.AI ? async (messages, model, opts = {}) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: opts.maxTokens || 300, temperature: opts.temperature ?? 0.3 })) : null
-    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) }, deferSocial: id => { socialJobs.push(id) }, internalKey: this.internalKey })
+    const app = createCloudApp({ fs, load, save, hits, googleTickets, appLoginCodes, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) }, deferSocial: id => { socialJobs.push(id) }, internalKey: this.internalKey })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
       const sessions = load('admin-sessions.json', {})
@@ -182,6 +183,7 @@ export class PizzadoniaShop extends DurableObject {
     const result = await app.fetch(request)
     save('rate-limits.json', [...hits].filter(([,v]) => v.length))
     save('google-tickets.json', [...googleTickets])
+    save('app-login-codes.json', [...appLoginCodes])
     fs.commit()
     if (outbox.length) await this.ctx.storage.setAlarm(Date.now() + 1000)
     return result

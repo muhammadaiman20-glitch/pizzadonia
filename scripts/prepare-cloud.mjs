@@ -8,6 +8,7 @@ if (start < 0 || stop < 0) throw new Error('Server layout changed: review the cl
 code = code.slice(start, stop)
 code = code.replace("const hits = new Map()", "const hits = runtime.hits")
 code = code.replace("const googleTickets = new Map()", "const googleTickets = runtime.googleTickets")
+code = code.replace("const appLoginCodes = new Map()", "const appLoginCodes = runtime.appLoginCodes")
 const proxyStart = code.indexOf("app.use((req, _res, next) =>")
 const proxyEnd = code.indexOf("app.use(express.json", proxyStart)
 code = code.slice(0, proxyStart) + code.slice(proxyEnd)

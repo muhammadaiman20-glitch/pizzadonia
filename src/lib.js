@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 // owner credential: a PIN ("0000") or a Google owner session ("g:<token>")
 export const adminHeaders = (cred) => (String(cred).startsWith('g:') ? { 'x-admin-session': String(cred).slice(2) } : { 'x-admin-pin': String(cred) })
+// Inside an APK the page knows which app it is in (capacitor.config appendUserAgent). null = a normal browser.
+export const appRole = (globalThis.navigator?.userAgent || '').match(/PizzadoniaApp\/(customer|seller)/)?.[1] || null
+export const appCall = (method, options = {}) => globalThis.Capacitor.nativePromise('PizzaApp', method, options)
+
 export const ownerSession = {
   get: () => store.get('pz.adminSession', null),
   set: (t) => store.set('pz.adminSession', t || null),

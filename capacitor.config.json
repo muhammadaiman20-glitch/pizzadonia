@@ -2,6 +2,7 @@
   "appId": "my.pizzadonia.app",
   "appName": "Pizzadonia",
   "webDir": "www",
+  "appendUserAgent": "PizzadoniaApp/customer",
   "server": {
     "url": "https://pizzadonia.pages.dev",
     "androidScheme": "https",

@@ -6,8 +6,9 @@ import OrderMap from '../components/OrderMap.jsx'
 import { STEPS, nextStep, stepIndex, stepOf } from '../status.js'
 import { PAY_STATUS, shrink } from '../components/PaymentPanel.jsx'
 import { TX } from './Wallet.jsx'
-import { autoRefresh, adminHeaders, api, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
+import { autoRefresh, adminHeaders, api, appRole, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
+import { SellerAppLogin } from '../components/AppBits.jsx'
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
 import { DEFAULT_OPS_MODEL, OPS_MODELS } from '../../ops-assistant.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
@@ -53,6 +54,10 @@ function chime() {
 function Login({ onOk }) {
   const { shop } = useShop()
   const [gErr, setGErr] = useState('')
+  const onAppSession = useCallback((session) => {
+    ownerSession.set(session)
+    onOk('g:' + session)
+  }, [onOk])
   const onGoogle = async (credential) => {
     setGErr('')
     try {
@@ -92,7 +97,7 @@ function Login({ onOk }) {
         <h1 className="mt-5 font-display text-2xl tracking-wide">Seller login</h1>
         {shop?.googleClientId && (
           <div className="mt-4">
-            <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} text="signin_with" />
+            {appRole === 'seller' ? <SellerAppLogin onSession={onAppSession} /> : <GoogleButton clientId={shop.googleClientId} onCredential={onGoogle} text="signin_with" />}
             {gErr && <p className="mt-2 text-[13px] font-semibold text-tomato">{gErr}</p>}
             {!shop?.cloudHosted && <div className="my-4 flex items-center gap-3 text-[12px] text-muted"><span className="h-px flex-1 bg-line" /> or PIN (this PC / Tailscale only) <span className="h-px flex-1 bg-line" /></div>}
           </div>

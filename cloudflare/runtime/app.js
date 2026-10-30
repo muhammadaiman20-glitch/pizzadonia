@@ -592,6 +592,38 @@ app.post('/api/admin/google', async (req, res) => {
   if (!isAdminEmail(g.email)) return res.status(403).json({ error: `${g.email} is not an admin account of this shop` })
   res.json({ session: newAdminSession(g.email), email: g.email, name: g.name, picture: g.picture })
 })
+// Pizzadonia Seller: Google works only in the phone's real browser. The browser gets a short one-time code bound to a
+// secret only the app holds (PKCE), so another app that catches the code on its way back cannot use it.
+const appLoginCodes = runtime.appLoginCodes
+app.post('/api/admin/app-login', async (req, res) => {
+  if (limited('google:' + req.ip, 20)) return res.status(429).json({ error: 'Terlalu banyak cubaan. Cuba lagi nanti.' })
+  hit('google:' + req.ip)
+  const challenge = String(req.body?.challenge || '')
+  if (!/^[A-Za-z0-9_-]{43}$/.test(challenge)) return res.status(400).json({ error: 'Pautan log masuk tidak sah. Buka semula dari aplikasi.' })
+  let g
+  try {
+    g = await verifyGoogle(String(req.body?.credential || ''))
+  } catch (e) {
+    return res.status(401).json({ error: e.message })
+  }
+  if (!isAdminEmail(g.email)) return res.status(403).json({ error: g.email + ' bukan akaun pemilik kedai ini.' })
+  const now = Date.now()
+  for (const [k, v] of appLoginCodes) if (v.exp < now) appLoginCodes.delete(k)
+  const code = crypto.randomBytes(24).toString('base64url')
+  appLoginCodes.set(code, { email: g.email, challenge, exp: now + 3 * 60 * 1000 })
+  res.json({ code })
+})
+app.post('/api/admin/app-login/redeem', (req, res) => {
+  if (limited('applogin:' + req.ip, 20)) return res.status(429).json({ error: 'Terlalu banyak cubaan. Cuba lagi nanti.' })
+  const code = String(req.body?.code || ''), found = appLoginCodes.get(code)
+  appLoginCodes.delete(code)
+  const hash = crypto.createHash('sha256').update(String(req.body?.verifier || '')).digest('base64url')
+  if (!found || found.exp < Date.now() || found.challenge !== hash) {
+    hit('applogin:' + req.ip)
+    return res.status(403).json({ error: 'Log masuk tamat tempoh. Cuba sekali lagi.' })
+  }
+  res.json({ session: newAdminSession(found.email) })
+})
 app.post('/api/admin/logout', (req, res) => {
   const g = adminSessionOf(req)
   if (g) {

@@ -1,0 +1,24 @@
+{
+  "appId": "my.pizzadonia.seller",
+  "appName": "Pizzadonia Seller",
+  "webDir": "www",
+  "appendUserAgent": "PizzadoniaApp/seller",
+  "server": {
+    "url": "https://pizzadonia.pages.dev",
+    "androidScheme": "https",
+    "errorPath": "index.html",
+    "allowNavigation": [
+      "pizzadonia.pages.dev",
+      "*.pizzadonia.pages.dev"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "style": "LIGHT",
+      "insetsHandling": "css"
+    }
+  }
+}

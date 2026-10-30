@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Banknote, Bike, Flame, MapPin, Minus, Plus, ShoppingBag, Store, Trash2, UserRound, X } from 'lucide-react'
 import Logo from '../components/Logo.jsx'
-import { cartApi, cartKey, cartLines, fmtDay, go, ownerSession, rm, store, useAccount, useCart, useShop } from '../lib.js'
+import { cartApi, cartKey, cartLines, fmtDay, go, appRole, ownerSession, rm, store, useAccount, useCart, useShop } from '../lib.js'
 
 
 export function Header({ onCart, count }) {
@@ -17,7 +17,7 @@ export function Header({ onCart, count }) {
               <span className={`size-2 rounded-full ${shop.open ? 'bg-basil' : 'bg-tomato'}`} /> {shop.open ? 'Dibuka sekarang' : 'Tutup'}
             </span>
           )}
-          {ownerSession.get() && (!acc || acc.owner) && (
+          {!appRole && ownerSession.get() && (!acc || acc.owner) && (
             <a href="#/admin" className="btn bg-ink px-3 py-2 text-[13px] text-white" aria-label="Seller page"><Store className="size-4" /> <span className="hidden sm:inline">Seller</span></a>
           )}
           <a href="#/akaun" className="btn btn-ghost px-3 py-2 text-[14px]" aria-label={acc ? `Akaun ${acc.name}` : 'Log masuk'}>
