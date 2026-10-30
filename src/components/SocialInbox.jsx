@@ -3,7 +3,7 @@ import { ArrowLeft, Bot, Check, ClipboardCopy, Loader2, MessageCircle, Plug, Ref
 import { api, autoRefresh } from '../lib.js'
 import { withTxPin } from './PinPrompt.jsx'
 
-const NAME = { facebook: 'Facebook', instagram: 'Instagram' }
+const NAME = { facebook: 'Facebook', instagram: 'Instagram', whatsapp: 'WhatsApp' }
 const timeOf = (t) => new Date(t).toLocaleString('ms-MY', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 
 function CopyRow({ label, value }) {
@@ -88,6 +88,38 @@ function Connect({ d, pin, onChanged }) {
           <CopyRow label="Token pengesahan (Verify token)" value={d.verifyToken} />
           <p className="mt-2 text-[12.5px] text-muted">{d.lastInboundAt ? `Mesej terakhir diterima ${timeOf(d.lastInboundAt)}.` : 'Belum ada mesej diterima. Hantar mesej percubaan dari akaun lain.'}</p>
         </div>
+      )}
+    </section>
+  )
+}
+
+function WhatsAppCard({ d, pin, onChanged }) {
+  const w = d.whatsapp
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const toggle = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      if (await withTxPin(w.on ? 'Matikan mesej jualan WhatsApp' : 'Hidupkan mesej jualan WhatsApp', (tx) => api('/api/admin/social/whatsapp', { method: 'PUT', body: { on: !w.on }, pin, txPin: tx }))) await onChanged()
+    } catch (e) {
+      setError(e.message)
+    }
+    setBusy(false)
+  }
+  const full = w.used >= w.free
+  return (
+    <section className="card p-4">
+      <h2 className="flex items-center gap-2 text-[15px] font-extrabold"><MessageCircle className="size-4 text-basil" /> WhatsApp</h2>
+      {!w.available ? (
+        <p className="mt-1 text-[13.5px]">Sambung nombor WhatsApp dahulu di <b>Shop &amp; fees</b>. Guna nombor khas untuk API, bukan nombor pada app WhatsApp biasa.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-[13.5px]">{w.on ? <>Mesej ke <b>+{w.number}</b> masuk ke sini. Kod log masuk tetap berfungsi seperti biasa.</> : <>Nombor <b>+{w.number}</b> kini untuk kod log masuk sahaja.</>}</p>
+          <p className={`mt-2 text-[13px] ${full ? 'font-semibold text-tomato-deep' : 'text-muted'}`}>{w.used} daripada {w.free} mesej percuma bulan ini. {full ? 'Balasan automatik berhenti. Mesej seterusnya berbayar, dan Meta tidak menghantarnya jika tiada kaedah bayaran.' : ''}</p>
+          {error && <p role="alert" className="mt-2 text-[13px] font-semibold text-tomato-deep">{error}</p>}
+          <button className="btn btn-ghost mt-3 min-h-11 px-4" disabled={busy} onClick={toggle}>{w.on ? 'Matikan' : 'Hidupkan mesej jualan'}</button>
+        </>
       )}
     </section>
   )
@@ -214,7 +246,7 @@ export default function SocialInbox({ pin }) {
         {d.chats.length === 0 ? (
           <div className="card p-8 text-center text-[13.5px] text-muted">
             <MessageCircle className="mx-auto mb-2 size-8 text-line" />
-            {d.connected ? 'Belum ada mesej. Mesej Facebook dan Instagram akan muncul di sini.' : 'Sambung Page anda dahulu untuk menerima mesej di sini.'}
+            {d.connected || d.whatsapp.on ? 'Belum ada mesej. Mesej pelanggan akan muncul di sini.' : 'Sambung Page atau WhatsApp anda dahulu untuk menerima mesej di sini.'}
           </div>
         ) : (
           <ul className="space-y-2">
@@ -240,7 +272,8 @@ export default function SocialInbox({ pin }) {
         )}
       </div>
       <div className="min-w-0 space-y-4">
-        {d.connected && <Mode d={d} pin={pin} onChanged={load} />}
+        {(d.connected || d.whatsapp.on) && <Mode d={d} pin={pin} onChanged={load} />}
+        <WhatsAppCard d={d} pin={pin} onChanged={load} />
         <Connect d={d} pin={pin} onChanged={load} />
       </div>
     </div>

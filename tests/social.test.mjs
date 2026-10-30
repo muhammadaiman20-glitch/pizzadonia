@@ -13,6 +13,8 @@ const settings = { shopName: 'Test Pizzadonia', open: true, shop: { lat: 5.3, ln
 const menu = [{ id: 'ayam', name: 'Peperoni Ayam', desc: 'Ayam', price: 21.9, cost: 7.77, available: true }]
 const TOKEN = 'EAAtestPageTokenTestPageTokenTest123'
 const SECRET = 'a'.repeat(32)
+const WA_SECRET = 'c'.repeat(32)
+settings.waLogin = { phoneNumberId: 'W1', wabaId: 'B1', token: 'EAAwhatsappTokenWhatsappTokenTest123', appSecret: WA_SECRET, verifyToken: 'wa-verify', number: '60123456789', name: 'Pizzadonia' }
 const tx = { 'x-admin-txpin': settings.adminPin }
 
 test('socialEvents: messages and echoes from both platforms; other webhooks skipped', () => {
@@ -68,6 +70,10 @@ test('social API: signature, drafts, approval, handoff, auto mode, 24 hours', as
     if (url.pathname.endsWith('/messages')) {
       if (sendFail) return Response.json({ error: { message: 'Token tamat', code: sendFail } }, { status: 400 })
       const body = await request.json()
+      if (url.pathname.includes('/W1/')) {
+        sent.push({ pathname: url.pathname, recipient: { id: body.to }, message: { text: body.text.body } })
+        return Response.json({ messages: [{ id: 'wamid-' + sent.length }] })
+      }
       sent.push({ pathname: url.pathname, ...body })
       return Response.json({ recipient_id: body.recipient.id, message_id: 'sent-' + sent.length })
     }
@@ -97,6 +103,10 @@ test('social API: signature, drafts, approval, handoff, auto mode, 24 hours', as
     const sig = 'sha256=' + crypto.createHmac('sha256', secret).update(json).digest('hex')
     return raw('/api/social/webhook', { method: 'POST', headers: { 'X-Hub-Signature-256': sig, 'CF-Connecting-IP': '198.51.100.33' }, body: json })
   }
+  const hookWa = (text, from = '60111111111', id) => {
+    const json = JSON.stringify({ entry: [{ changes: [{ value: { messages: [{ id: id || 'wa-' + ++mid, from, type: 'text', text: { body: text } }] } }] }] })
+    return raw('/api/whatsapp/webhook', { method: 'POST', headers: { 'X-Hub-Signature-256': 'sha256=' + crypto.createHmac('sha256', WA_SECRET).update(json).digest('hex'), 'CF-Connecting-IP': '198.51.100.34' }, body: json })
+  }
   const social = async () => (await call('/api/admin/social')).data
   const chat = async (id = 'fb-U1') => (await social()).chats.find((c) => c.id === id)
   // background AI work finishes shortly after the webhook returns
@@ -111,7 +121,7 @@ test('social API: signature, drafts, approval, handoff, auto mode, 24 hours', as
   const act = (id, action, extra = {}) => call(`/api/admin/social/${id}`, { method: 'POST', body: { action, ...extra } })
   try {
     assert.equal((await call('/_migration/import', { method: 'POST', owner: false, headers: { 'x-import-key': importKey }, body: { finalize: true, files: [encode('settings.json', settings), encode('menu.json', menu),
-      encode('social.json', { chats: [{ id: 'fb-OLD', platform: 'facebook', userId: 'OLD', messages: [{ from: 'customer', text: 'hai', at: Date.now() - 25 * 3600000 }], status: 'open', draft: null, paused: false, unread: 0, lastCustomerAt: Date.now() - 25 * 3600000, updatedAt: Date.now() - 25 * 3600000 }], seen: [], usage: { day: '', count: 0 }, lastInboundAt: 0 }),
+      encode('social.json', { chats: [{ id: 'fb-OLD', platform: 'facebook', userId: 'OLD', messages: [{ from: 'customer', text: 'hai', at: Date.now() - 25 * 3600000 }], status: 'open', draft: null, paused: false, unread: 0, lastCustomerAt: Date.now() - 25 * 3600000, updatedAt: Date.now() - 25 * 3600000 }], seen: [], usage: { day: '', count: 0 }, lastInboundAt: 0, waMonth: { month: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7), count: 997, warned: false } }),
       encode('admin-sessions.json', { [session]: { email: 'owner@example.com', exp: Date.now() + 86400000 } })] } })).status, 200)
 
     // not connected: nothing gets in, and strangers can't read or connect
@@ -183,6 +193,29 @@ test('social API: signature, drafts, approval, handoff, auto mode, 24 hours', as
     await hook('hai', { owner: 'P9', user: 'U9' })
     assert.equal(await chat('fb-U9'), undefined)
 
+    // WhatsApp off: the number stays login-only, and nothing reaches the inbox
+    const WA = '60111111111'
+    assert.equal((await social()).whatsapp.on, false)
+    await hookWa('Ada pizza apa?', WA)
+    assert.match(sent.at(-1).message.text, /kod log masuk sahaja/)
+    assert.equal(await chat('wa-' + WA), undefined)
+
+    // turning it on needs the PIN; then questions become drafts, and login codes stay out of the inbox
+    assert.equal((await call('/api/admin/social/whatsapp', { method: 'PUT', body: { on: true } })).status, 428)
+    assert.equal((await call('/api/admin/social/whatsapp', { method: 'PUT', body: { on: true }, headers: tx })).data.on, true)
+    await hookWa('Kod log masuk: 123456', WA)
+    assert.match(sent.at(-1).message.text, /Kod ini sudah tamat/)
+    assert.equal(await chat('wa-' + WA), undefined)
+    const countBefore = sent.length
+    await hookWa('Ada pizza apa?', WA, 'wa-dup')
+    await hookWa('Ada pizza apa?', WA, 'wa-dup') // Meta re-sending changes nothing
+    const waDraft = await until(async () => { const c = await chat('wa-' + WA); return c?.draft && c }, 'WhatsApp draft')
+    assert.equal(waDraft.messages.length, 1)
+    assert.equal(sent.length, countBefore)
+    assert.equal((await act('wa-' + WA, 'send', { text: waDraft.draft.text })).status, 200)
+    assert.deepEqual([sent.at(-1).pathname.split('/').at(-2), sent.at(-1).recipient.id], ['W1', WA])
+    assert.equal((await social()).whatsapp.used, 1000) // 997 seeded + 2 login replies + this reply
+
     // auto mode needs the PIN; then clean replies go out by themselves and say they are automated
     assert.equal((await call('/api/admin/social/mode', { method: 'PUT', body: { mode: 'auto' } })).status, 428)
     assert.equal((await call('/api/admin/social/mode', { method: 'PUT', body: { mode: 'auto' }, headers: tx })).data.mode, 'auto')
@@ -205,6 +238,12 @@ test('social API: signature, drafts, approval, handoff, auto mode, 24 hours', as
     await hook('refund cepat', { user: 'A3' })
     assert.equal(sent.filter((s) => s.recipient.id === 'A3').length, 1)
     assert.match(sent.find((s) => s.recipient.id === 'A3').message.text, /Penjual akan membalas/)
+
+    // auto mode: once the free WhatsApp messages are used up, replies wait as drafts instead of costing money
+    const waSent = sent.length
+    await hookWa('Ada pizza apa?', '60122222222')
+    await until(async () => (await chat('wa-60122222222'))?.draft, 'held WhatsApp draft')
+    assert.equal(sent.length, waSent)
 
     // a reply typed in Meta's own inbox pauses the AI for that chat
     const echo = JSON.stringify({ object: 'page', entry: [{ id: 'P1', messaging: [{ sender: { id: 'P1' }, recipient: { id: 'A1' }, timestamp: Date.now(), message: { mid: 'manual-1', text: 'Saya penjual', is_echo: true } }] }] })

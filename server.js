@@ -90,7 +90,7 @@ const SETTINGS_SEED = {
   // Token + app secret are pasted on the dashboard and never leave the server. number = digits for wa.me links.
   waLogin: { phoneNumberId: '', wabaId: '', token: '', appSecret: '', verifyToken: '', number: '', name: '' },
   // Facebook Page + Instagram DMs (social.js): Page token and app secret stay on the server. mode: draft = owner approves, auto = clean replies go out
-  social: { pageId: '', pageName: '', igId: '', igName: '', token: '', appSecret: '', verifyToken: '', mode: 'draft' },
+  social: { pageId: '', pageName: '', igId: '', igName: '', token: '', appSecret: '', verifyToken: '', mode: 'draft', whatsapp: false },
   riderKeepsFee: true, // COD: the rider keeps the delivery fee and banks in the rest (pizza money) to the owner
 }
 
@@ -2059,6 +2059,8 @@ async function onWhatsAppMessage(m) {
     text = `✅ Nombor ${showPhone(phone)} disahkan.\n\nKembali ke laman ${settings.shopName} - anda sudah log masuk.${site ? '\n' + site + '/#/akaun' : ''}`
   } else {
     savePhoneLogins(p)
+    // the shop's sales inbox takes everything that isn't a login code
+    if (!r && !code && settings.social.whatsapp) return socialInbox.whatsappInbound(m)
     // a few replies per sender, so a stuck phone or a script can't make us send forever
     if (limited('wa-reply:' + m.from, 5)) return
     hit('wa-reply:' + m.from)
@@ -2068,6 +2070,7 @@ async function onWhatsAppMessage(m) {
   }
   const sent = await waText(settings.waLogin, m.from, text)
   if (!sent.ok) console.log(`[whatsapp] reply failed: ${sent.error}`)
+  else socialInbox.loginReplySent()
 }
 // WhatsApp login card on Shop & fees. The token and app secret never leave the server.
 app.get('/api/admin/whatsapp', admin, (_req, res) => {
@@ -2109,8 +2112,9 @@ app.delete('/api/admin/whatsapp', admin, adminTx, (_req, res) => {
 // Facebook + Instagram DMs. The AI turn runs after the shop lock is released (cloud only).
 const deferSocial = (_id) => {}
 const internalKey = ''
-createSocial({ load, save, getSettings: () => settings, saveSettings: () => save('settings.json', settings), getMenu: () => menu, getPromos: () => promos, cashbackLive,
-  admin, adminTx, clean, myDay, siteBase, aiModel, tg, deferSocial, internalKey, sameSecret, express })(app)
+const socialInbox = createSocial({ load, save, getSettings: () => settings, saveSettings: () => save('settings.json', settings), getMenu: () => menu, getPromos: () => promos, cashbackLive,
+  admin, adminTx, clean, myDay, siteBase, aiModel, tg, deferSocial, internalKey, sameSecret, express, waReady })
+socialInbox(app)
 
 // health checks for /check and the AI helper's check_health tool. level: error = customers or alerts are affected,
 // warn = needs attention, ok = fine.
