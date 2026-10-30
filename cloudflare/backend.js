@@ -117,7 +117,7 @@ export class PizzadoniaShop extends DurableObject {
       return { ok: true, queued: true }
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
-    const aiGenerate = this.env.AI ? async (messages, model) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: 300, temperature: 0.3 })) : null
+    const aiGenerate = this.env.AI ? async (messages, model, opts = {}) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: opts.maxTokens || 300, temperature: opts.temperature ?? 0.3 })) : null
     const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) } })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {

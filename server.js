@@ -4,6 +4,7 @@
 import express from 'express'
 import { createSupport } from './support.js'
 import { createLedger } from './ledger.js'
+import { createMarketing } from './marketing.js'
 import { tgDelivery, tgSend } from './telegram.js'
 import { AI_MODELS, aiModel } from './workers-ai.js'
 import { COMMANDS, HOOK_UPDATES, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from './telegram-bot.js'
@@ -1761,6 +1762,9 @@ createSupport({ load, save, getSettings: () => settings, getMenu: () => menu, ge
 
 createLedger({ load, save, getSettings: () => settings, getOrders: () => orders, getBankins: () => bankins, getWallets: () => wallets,
   walletBal, admin, adminTx, clean, money })(app)
+
+createMarketing({ load, save, getSettings: () => settings, getMenu: () => menu, getOrders: () => orders, getPromos: () => promos, cashbackLive,
+  admin, clean, myDay, aiGenerate, aiModel })(app)
 
 // ---- Telegram: Pizzadonia's own bot. The owner pastes the BotFather token, then "Connect" opens Telegram on
 // t.me/<bot>?start=<code>; the webhook below sees "/start <code>" and links that chat. The dashboard polls

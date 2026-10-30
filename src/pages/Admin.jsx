@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Ban, Bot, Headset, PiggyBank, Send, Banknote, Bell, Bike, Camera, ChefHat, CircleCheck, Gift, KeyRound, Landmark, Mail, Pencil, Plus, RotateCcw, Search, Tag, Unlink, Users, Wallet, CircleX, Copy, ExternalLink, FileUp, Map as MapIcon, QrCode, ReceiptText, Share2, Trash2, ClipboardList, Loader2, Lock, LogOut, MapPin, MessageCircle, Navigation, Phone, Save, Settings, UtensilsCrossed } from 'lucide-react'
+import { Ban, Bot, Headset, Megaphone, PiggyBank, Send, Banknote, Bell, Bike, Camera, ChefHat, CircleCheck, Gift, KeyRound, Landmark, Mail, Pencil, Plus, RotateCcw, Search, Tag, Unlink, Users, Wallet, CircleX, Copy, ExternalLink, FileUp, Map as MapIcon, QrCode, ReceiptText, Share2, Trash2, ClipboardList, Loader2, Lock, LogOut, MapPin, MessageCircle, Navigation, Phone, Save, Settings, UtensilsCrossed } from 'lucide-react'
 import Logo from '../components/Logo.jsx'
 import MapPicker from '../components/MapPicker.jsx'
 import OrderMap from '../components/OrderMap.jsx'
@@ -12,6 +12,7 @@ import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
 import { DEFAULT_OPS_MODEL, OPS_MODELS } from '../../ops-assistant.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
 import WhatsAppLogin from '../components/WhatsAppLogin.jsx'
+import Marketing from '../components/Marketing.jsx'
 import { TelegramChip, TelegramSettings, useTelegramStatus } from '../components/TelegramConnect.jsx'
 
 const ago = (iso) => {
@@ -2122,19 +2123,19 @@ export default function Admin() {
     go(20)
   }
   if (!pin) return <Login onOk={setPin} />
-  const TABS = [['orders', 'Orders', ClipboardList], ['account', 'Business account', PiggyBank], ['support', supportBadge ? `Support (${supportBadge})` : 'Support', Headset], ['customers', 'Customers', Users], ['money', 'Money', Landmark], ['wallets', 'Wallets & promo', Wallet], ['menu', 'Menu', UtensilsCrossed], ['settings', 'Shop & fees', Settings]]
+  const TABS = [['orders', 'Orders', ClipboardList], ['account', 'Business account', PiggyBank], ['support', supportBadge ? `Support (${supportBadge})` : 'Support', Headset], ['customers', 'Customers', Users], ['marketing', 'Marketing', Megaphone], ['money', 'Money', Landmark], ['wallets', 'Wallets & promo', Wallet], ['menu', 'Menu', UtensilsCrossed], ['settings', 'Shop & fees', Settings]]
   return (
     <div className="min-h-dvh pb-16">
       <header className="safe-top sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Logo small />
-          <span className="rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">Seller</span>
+          <span className="hidden rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white sm:inline">Seller</span>
           <div className="ml-auto"><TelegramChip st={tgStatus} onOpen={openTelegram} /></div>
-          <button onClick={logout} className="btn btn-ghost px-3 py-1.5 text-[12.5px]"><LogOut className="size-3.5" /> Log out</button>
+          <button onClick={logout} aria-label="Log out" className="btn btn-ghost min-h-11 min-w-11 px-3 py-1.5 text-[12.5px]"><LogOut className="size-3.5" /> <span className="hidden sm:inline">Log out</span></button>
         </div>
         <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 pb-2">
           {TABS.map(([id, l, I]) => (
-            <button key={id} onClick={() => setTab(id)} className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[13.5px] font-bold ${tab === id ? 'bg-tomato text-white' : 'hover:bg-white'}`}>
+            <button key={id} onClick={(e) => { setTab(id); e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'center' }) }} className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[13.5px] font-bold ${tab === id ? 'bg-tomato text-white' : 'hover:bg-white'}`}>
               <I className="size-4" /> {l}
             </button>
           ))}
@@ -2145,6 +2146,7 @@ export default function Admin() {
         {tab === 'money' && <Money pin={pin} />}
         {tab === 'wallets' && <Wallets pin={pin} />}
         {tab === 'customers' && <Customers pin={pin} />}
+        {tab === 'marketing' && <Marketing pin={pin} />}
         {tab === 'support' && <Support pin={pin} />}
         {tab === 'account' && <BusinessAccount pin={pin} />}
         {tab === 'menu' && <MenuAdmin pin={pin} />}
