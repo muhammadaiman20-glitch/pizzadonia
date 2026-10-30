@@ -6,6 +6,7 @@ import { createCloudApp } from './runtime/app.js'
 import { permanentFailure, tgApi } from '../telegram-bot.js'
 import { opsModel, runOpsTurn } from '../ops-assistant.js'
 import { aiModel, aiText } from '../workers-ai.js'
+import { aiWithRetry } from '../marketing.js'
 
 const response = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
 const safeEqual = (a, b) => {
@@ -27,28 +28,79 @@ export default {
 export class PizzadoniaShop extends DurableObject {
   queue = Promise.resolve()
   ops = Promise.resolve()
+  social = Promise.resolve()
+  internalKey = crypto.randomUUID() // proves a request came from this object, never leaves it
   constructor(ctx, env) {
     super(ctx, env)
     ShopFiles.initialize(this.ctx.storage.sql)
   }
   async fetch(request) {
+    const url = new URL(request.url)
+    if (url.pathname === '/api/admin/marketing/generate' && request.method === 'POST' && this.env.AI) return this.marketingDraft(request)
     // Serialize business commands, including their network waits, without blockConcurrencyWhile.
     const previous = this.queue
     let release
     this.queue = new Promise(resolve => { release = resolve })
     await previous
     const opsJobs = []
+    const socialJobs = []
     let result
-    try { result = await this.handle(request, opsJobs) }
+    try { result = await this.handle(request, opsJobs, socialJobs) }
     catch (e) {
       opsJobs.length = 0 // its owner session was discarded with the failed command
+      socialJobs.length = 0
       console.error(JSON.stringify({ event: 'shop_error', message: e.message, path: new URL(request.url).pathname }))
       result = response({ error: 'Sistem tidak dapat memproses permintaan. Sila cuba lagi.' }, 500)
     } finally { release() }
     // The owner's AI helper runs after the shop lock is released: each of its tool calls is its own serialized
     // request, so orders keep flowing while the model thinks. Telegram gets its 200 when the turn ends.
     for (const job of opsJobs) await this.runOps(job)
+    // Customer messages: Meta gets its 200 now, and the AI writes the reply in the background.
+    for (const id of socialJobs) this.ctx.waitUntil(this.runSocial(id))
     return result
+  }
+  aiRun(messages, model, maxTokens, temperature) {
+    return aiWithRetry(async () => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: maxTokens, temperature })))
+  }
+  // Marketing draft: the AI writes with no lock held, so orders never wait for it.
+  async marketingDraft(request) {
+    const body = await request.text()
+    const step = async (path, json) => {
+      const r = await this.fetch(new Request('https://shop.internal/api/admin/marketing/' + path, { method: 'POST', headers: request.headers, body: json }))
+      return { r, data: await r.clone().json().catch(() => null) }
+    }
+    const prep = await step('prepare', body)
+    if (!prep.r.ok) return prep.r
+    let text
+    try { text = await this.aiRun(prep.data.messages, prep.data.model, 900, 0.7) }
+    catch (e) {
+      console.error(JSON.stringify({ event: 'marketing_ai_error', message: e.message }))
+      return response({ error: 'AI gagal menulis draf. Cuba sekali lagi sebentar nanti.' }, 502)
+    }
+    return (await step('save', JSON.stringify({ ...prep.data.draft, text }))).r
+  }
+  // One customer reply at a time, so two quick messages cannot overlap. Each shop call is its own serialized request.
+  runSocial(id) {
+    const run = this.social.then(async () => {
+      const call = async (method, body) => {
+        const r = await this.fetch(new Request('https://shop.internal/api/social/internal/' + encodeURIComponent(id), { method,
+          headers: { 'x-internal-key': this.internalKey, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }))
+        return r.json().catch(() => null)
+      }
+      const job = await call('GET')
+      if (!job) return
+      if (job.limit) return call('POST', { limit: true, at: job.at })
+      if (job.skip) return
+      let answer
+      try { answer = { text: await this.aiRun(job.messages, job.model, 300, 0.3) } }
+      catch (e) {
+        console.error(JSON.stringify({ event: 'social_ai_error', message: e.message }))
+        answer = { error: true }
+      }
+      await call('POST', { ...answer, at: job.at })
+    })
+    this.social = run.catch((e) => console.error(JSON.stringify({ event: 'social_job_error', message: e.message })))
+    return this.social
   }
   // One helper turn at a time, so two quick messages cannot interleave the helper's memory.
   runOps(job) {
@@ -68,7 +120,7 @@ export class PizzadoniaShop extends DurableObject {
     this.ops = run.catch(() => {})
     return run
   }
-  async handle(request, opsJobs = []) {
+  async handle(request, opsJobs = [], socialJobs = []) {
     const url = new URL(request.url)
     const fs = new ShopFiles(this.ctx.storage)
     const ready = this.ctx.storage.sql.exec("SELECT value FROM metadata WHERE key = 'ready'").toArray().length > 0
@@ -118,7 +170,7 @@ export class PizzadoniaShop extends DurableObject {
     }
     const tgDelivery = () => ({ ...load('telegram-delivery.json', { at: 0, ok: null, error: '' }), queued: outbox.length })
     const aiGenerate = this.env.AI ? async (messages, model, opts = {}) => aiText(await this.env.AI.run(aiModel(model), { messages, max_tokens: opts.maxTokens || 300, temperature: opts.temperature ?? 0.3 })) : null
-    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) } })
+    const app = createCloudApp({ fs, load, save, hits, googleTickets, tgSend, tgDelivery, aiGenerate, deferOps: job => { opsJobs.push(job) }, deferSocial: id => { socialJobs.push(id) }, internalKey: this.internalKey })
     // Owner-only complete backup, including PIN hashes and private documents. Never public or logged.
     app.get('/api/admin/cloud-backup', (_req, res) => {
       const sessions = load('admin-sessions.json', {})

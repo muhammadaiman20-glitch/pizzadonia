@@ -6,6 +6,19 @@ export const KINDS = { post: 'Post', video: 'Skrip video', promo: 'Idea promosi'
 export const MAX_PER_DAY = 40 // drafts per day: a limit on Workers AI cost
 const KEEP = 200
 const AI_TIMEOUT = 25000
+
+/** One AI call with a timeout and one retry. Throws if there is still no text. */
+export async function aiWithRetry(run) {
+  let last
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await Promise.race([run(), new Promise((_, no) => setTimeout(() => no(new Error('Masa menunggu AI tamat')), AI_TIMEOUT))])
+      if (String(text || '').trim()) return String(text).trim()
+      last = new Error('AI tidak memberi jawapan')
+    } catch (e) { last = e }
+  }
+  throw last
+}
 const STYLE = {
   facebook: 'Post Facebook: mesra, 3-5 ayat pendek.',
   instagram: 'Caption Instagram: 2-4 ayat pendek, emoji sederhana, 3-6 hashtag di hujung.',
@@ -100,21 +113,6 @@ export function createMarketing({ load, save, getSettings, getMenu, getOrders, g
   const facts = () => shopFacts({ settings: getSettings(), menu: getMenu(), promos: getPromos(), cashback: cashbackLive() })
   const view = (d, f) => ({ ...d, warnings: checkClaims(d.text, f) })
 
-  async function generate(messages, model) {
-    let last
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const text = await Promise.race([
-          aiGenerate(messages, model, { maxTokens: 900, temperature: 0.7 }),
-          new Promise((_, no) => setTimeout(() => no(new Error('Masa menunggu AI tamat')), AI_TIMEOUT)),
-        ])
-        if (String(text || '').trim()) return String(text).trim().slice(0, 2500)
-        last = new Error('AI tidak memberi jawapan')
-      } catch (e) { last = e }
-    }
-    throw last
-  }
-
   return function routes(app) {
     app.get('/api/admin/marketing', admin, (_req, res) => {
       const f = facts()
@@ -126,8 +124,10 @@ export function createMarketing({ load, save, getSettings, getMenu, getOrders, g
       })
     })
 
-    app.post('/api/admin/marketing/generate', admin, async (req, res) => {
-      if (!aiGenerate) return res.status(503).json({ error: 'AI hanya berjalan pada kedai Cloudflare. Cuba di laman sebenar.' })
+    // The cloud backend answers /generate itself: prepare, AI with no lock held, then save. Here there is no AI.
+    app.post('/api/admin/marketing/generate', admin, (_req, res) => res.status(503).json({ error: 'AI hanya berjalan pada kedai Cloudflare. Cuba di laman sebenar.' }))
+
+    app.post('/api/admin/marketing/prepare', admin, (req, res) => {
       const b = req.body || {}
       const platform = String(b.platform || '')
       const kind = String(b.kind || '')
@@ -137,24 +137,24 @@ export function createMarketing({ load, save, getSettings, getMenu, getOrders, g
       const ids = Array.isArray(b.products) ? b.products.map(String).slice(0, 10) : []
       const chosen = ids.length ? f.products.filter((p) => ids.includes(p.id)) : f.products
       if (ids.length && chosen.length !== ids.length) return res.status(400).json({ error: 'Produk dipilih tiada atau sudah habis.' })
-      const today = myDay()
       const before = read()
-      if (before.usage.day === today && before.usage.count >= MAX_PER_DAY) return res.status(429).json({ error: `Had ${MAX_PER_DAY} draf sehari sudah dicapai. Cuba lagi esok.` })
+      if (before.usage.day === myDay() && before.usage.count >= MAX_PER_DAY) return res.status(429).json({ error: `Had ${MAX_PER_DAY} draf sehari sudah dicapai. Cuba lagi esok.` })
       const goal = clean(b.goal, 300)
-      const model = aiModel(getSettings().aiChat?.model)
-      let text
-      try {
-        text = await generate(promptFor({ platform, kind, goal, products: chosen, facts: f }), model)
-      } catch (e) {
-        console.error(JSON.stringify({ event: 'marketing_ai_error', message: e.message }))
-        return res.status(502).json({ error: 'AI gagal menulis draf. Cuba sekali lagi sebentar nanti.' })
-      }
-      // read again: other requests may have saved while the AI was writing
+      res.json({ messages: promptFor({ platform, kind, goal, products: chosen, facts: f }), model: aiModel(getSettings().aiChat?.model),
+        draft: { platform, kind, goal, products: chosen.length === f.products.length ? [] : chosen.map((p) => p.name) } })
+    })
+
+    app.post('/api/admin/marketing/save', admin, (req, res) => {
+      const b = req.body || {}
+      const f = facts()
+      const text = String(b.text || '').trim().slice(0, 2500)
+      if (!PLATFORMS[b.platform] || !KINDS[b.kind] || !text) return res.status(400).json({ error: 'Draf tidak sah.' })
+      const today = myDay()
       const book = read()
       const usage = book.usage.day === today ? book.usage : { day: today, count: 0 }
       const at = new Date().toISOString()
-      const draft = { id: `MK-${String(book.nextId).padStart(4, '0')}`, platform, kind, goal, products: chosen.length === f.products.length ? [] : chosen.map((p) => p.name),
-        text, status: 'draft', model, createdAt: at, updatedAt: at }
+      const draft = { id: `MK-${String(book.nextId).padStart(4, '0')}`, platform: b.platform, kind: b.kind, goal: clean(b.goal, 300),
+        products: (Array.isArray(b.products) ? b.products : []).map((p) => clean(p, 80)).slice(0, 10), text, status: 'draft', model: aiModel(getSettings().aiChat?.model), createdAt: at, updatedAt: at }
       book.drafts = [draft, ...book.drafts].slice(0, KEEP)
       book.nextId++
       book.usage = { day: today, count: usage.count + 1 }

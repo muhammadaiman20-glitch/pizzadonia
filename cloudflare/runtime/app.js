@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createSupport } from '../../support.js'
 import { createLedger } from '../../ledger.js'
 import { createMarketing } from '../../marketing.js'
+import { createSocial } from '../../social.js'
 import { express } from './router.js'
 import { COMMANDS, HOOK_UPDATES, LINK_TTL, TOKEN_RE, WEBHOOK_PATH, chatLabel, linkUrls, ownerKeyboard, parseCommand, tgApi } from '../../telegram-bot.js'
 import { DEFAULT_OPS_MODEL, PLAN_TTL, healthText, opsModel } from '../../ops-assistant.js'
@@ -64,6 +65,8 @@ const SETTINGS_SEED = {
   // customer login by WhatsApp: the shop's WhatsApp Cloud API number (Meta). Customers send their login code to it.
   // Token + app secret are pasted on the dashboard and never leave the server. number = digits for wa.me links.
   waLogin: { phoneNumberId: '', wabaId: '', token: '', appSecret: '', verifyToken: '', number: '', name: '' },
+  // Facebook Page + Instagram DMs (social.js): Page token and app secret stay on the server. mode: draft = owner approves, auto = clean replies go out
+  social: { pageId: '', pageName: '', igId: '', igName: '', token: '', appSecret: '', verifyToken: '', mode: 'draft' },
   riderKeepsFee: true, // COD: the rider keeps the delivery fee and banks in the rest (pizza money) to the owner
 }
 
@@ -78,6 +81,7 @@ settings.aiChat = { enabled: settings.aiChat?.enabled !== false, model: aiModel(
 settings.telegram = { ...SETTINGS_SEED.telegram, ...settings.telegram }
 settings.opsAi = { enabled: settings.opsAi?.enabled !== false, model: opsModel(settings.opsAi?.model) }
 settings.waLogin = { ...SETTINGS_SEED.waLogin, ...settings.waLogin }
+settings.social = { ...SETTINGS_SEED.social, ...settings.social }
 // fire-and-forget Telegram message for one kind of event (payments | orders | support)
 // which bot + chat alerts go to ('' chat until the owner taps Start - then nothing is sent)
 function tgCreds() {
@@ -1483,7 +1487,8 @@ function settingsView(extra = {}) {
   // the bot token, webhook secret and link code never leave the server
   const { botToken, webhookSecret, link, ...telegram } = settings.telegram
   const { token: _token, appSecret: _secret, verifyToken: _verify, ...waLogin } = settings.waLogin // same for WhatsApp
-  return { ...settings, telegram: { ...telegram, hasToken: Boolean(botToken) }, waLogin: { ...waLogin, connected: waReady() },
+  const { token: _pageToken, appSecret: _pageSecret, verifyToken: _pageVerify, ...social } = settings.social // same for Facebook + Instagram
+  return { ...settings, social, telegram: { ...telegram, hasToken: Boolean(botToken) }, waLogin: { ...waLogin, connected: waReady() },
     telegramReady: tgReady(), telegramMode: tgCreds().mode, menu, ...extra }
 }
 app.get('/api/admin/settings', admin, (req, res) => res.json(settingsView({ me: req.adminEmail || null })))
@@ -2048,6 +2053,12 @@ app.delete('/api/admin/whatsapp', admin, adminTx, (_req, res) => {
   save('settings.json', settings)
   res.json({ ok: true })
 })
+
+// Facebook + Instagram DMs. The AI turn runs after the shop lock is released (cloud only).
+const deferSocial = runtime.deferSocial
+const internalKey = runtime.internalKey
+createSocial({ load, save, getSettings: () => settings, saveSettings: () => save('settings.json', settings), getMenu: () => menu, getPromos: () => promos, cashbackLive,
+  admin, adminTx, clean, myDay, siteBase, aiModel, tg, deferSocial, internalKey, sameSecret, express })(app)
 
 // health checks for /check and the AI helper's check_health tool. level: error = customers or alerts are affected,
 // warn = needs attention, ok = fine.

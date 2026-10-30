@@ -3,7 +3,7 @@
 // customers type untrusted text, so the model only ever gets text in and text out.
 import crypto from 'node:crypto'
 
-const HANDOFF_WORDS = /(manusia|penjual|seller|admin|owner|pemilik|tuan kedai|staff|cakap dengan|hubungi kedai|complain|komplen|aduan|marah|kecewa|refund|pulang(kan)? duit|duit balik|salah (order|pesanan|pizza)|tak sampai|belum sampai|lambat|lewat|sejuk|hangus|rosak|basi|tertinggal|batal|cancel|tipu|scam)/i
+export const HANDOFF_WORDS = /(manusia|penjual|seller|admin|owner|pemilik|tuan kedai|staff|cakap dengan|hubungi kedai|complain|komplen|aduan|marah|kecewa|refund|pulang(kan)? duit|duit balik|salah (order|pesanan|pizza)|tak sampai|belum sampai|lambat|lewat|sejuk|hangus|rosak|basi|tertinggal|batal|cancel|tipu|scam)/i
 
 const money = (v) => 'RM' + (Number(v) || 0).toFixed(2)
 const STATUS_MS = {

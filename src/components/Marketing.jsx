@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Check, ClipboardCopy, Loader2, Megaphone, Pencil, RefreshCw, Save, Send, Sparkles, Trash2, TriangleAlert, TrendingUp, X } from 'lucide-react'
 import { api, rm } from '../lib.js'
 import { KINDS, PLATFORMS } from '../../marketing.js'
+import SocialInbox from './SocialInbox.jsx'
 
 const STATUS = {
   draft: ['Draf', 'bg-cheese/40 text-ink'],
@@ -186,6 +187,20 @@ function DraftCard({ d, pin, onChanged, onRemoved }) {
 }
 
 export default function Marketing({ pin }) {
+  const [view, setView] = useState('content')
+  return (
+    <div>
+      <div className="mb-4 flex gap-2" role="tablist" aria-label="Bahagian Marketing">
+        {[['content', 'Kandungan'], ['inbox', 'Mesej']].map(([id, l]) => (
+          <button key={id} role="tab" aria-selected={view === id} onClick={() => setView(id)} className={`min-h-11 rounded-full px-5 text-[13.5px] font-bold ${view === id ? 'bg-ink text-white' : 'border border-line bg-white'}`}>{l}</button>
+        ))}
+      </div>
+      {view === 'content' ? <Content pin={pin} /> : <SocialInbox pin={pin} />}
+    </div>
+  )
+}
+
+function Content({ pin }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('open')
