@@ -42,6 +42,12 @@ body {
   border-radius: 9999px; font-weight: 700; transition: transform 0.12s, background 0.15s, box-shadow 0.15s;
 }
 .btn:active { transform: scale(0.97); }
+/* Phones: every control is big enough for a thumb */
+@media (pointer: coarse) {
+  button, .btn { min-height: 44px; }
+  /* icon-only buttons, such as close and the cart + and - */
+  button:has(> svg:only-child) { min-width: 44px; }
+}
 .btn:disabled { opacity: 0.5; pointer-events: none; }
 .btn-red { background: var(--color-tomato); color: #fff; box-shadow: var(--shadow-pop); }
 .btn-red:hover { background: var(--color-tomato-deep); }
