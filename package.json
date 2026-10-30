@@ -16,6 +16,8 @@
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name pizzadonia"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "express": "^5.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.50.0",
@@ -23,6 +25,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "esbuild": "0.28.2",
