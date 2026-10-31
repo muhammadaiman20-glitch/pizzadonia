@@ -17,7 +17,15 @@ export function createUpdater({ getInstalled, getLatest, install, getProgress, e
     snapshot = { ...snapshot, ...patch }
     listeners.forEach((l) => l())
   }
+  // A recheck that cannot read the version file keeps a known update and its sheet. A newer version starts the sheet again.
+  const afterCheck = (plan) => {
+    if (plan.state === 'offline' && snapshot.state === 'update') return { checking: false }
+    const newer = plan.state === 'update' && snapshot.latest && Number(plan.latest.versionCode) > Number(snapshot.latest.versionCode)
+    return { ...plan, checking: false, ...(newer ? { sheet: 'ready', message: '' } : {}) }
+  }
   const check = () => {
+    // the sheet must stay as it is while the file downloads
+    if (snapshot.working) return Promise.resolve()
     running ??= (async () => {
       checkedAt = now()
       set({ checking: true })
@@ -29,7 +37,7 @@ export function createUpdater({ getInstalled, getLatest, install, getProgress, e
       try {
         installed = await getInstalled()
       } catch { /* stays null */ }
-      set({ ...updatePlan(installed, latest), checking: false })
+      set(afterCheck(updatePlan(installed, latest)))
       running = null
     })()
     return running

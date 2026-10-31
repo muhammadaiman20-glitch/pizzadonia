@@ -1,2 +1,2 @@
-Kemas kini baharu dalam aplikasi, dengan peratus muat turun
-Boleh guna aplikasi dahulu jika muat turun gagal
+Paparan kemas kini lebih stabil semasa muat turun
+Butang buka pemasang tidak perlu muat turun semula

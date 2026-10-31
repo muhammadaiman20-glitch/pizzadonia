@@ -142,7 +142,7 @@ public class PizzaAppPlugin extends Plugin {
         }
         new Thread(() -> {
             try {
-                File apk = download(url);
+                File apk = readyApk(url);
                 Context ctx = getContext();
                 PackageInfo pi = ctx.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
                 if (pi == null || !ctx.getPackageName().equals(pi.packageName)) throw new Exception("Fail yang dimuat turun bukan aplikasi ini.");
@@ -161,6 +161,22 @@ public class PizzaAppPlugin extends Plugin {
                 call.reject(e.getMessage() == null ? "Muat turun gagal." : e.getMessage());
             }
         }).start();
+    }
+
+    /** The file from an earlier download when it is already this version, so opening the installer again needs no second download. */
+    private File readyApk(String url) throws Exception {
+        downloadPercent = -1;
+        Context ctx = getContext();
+        File kept = new File(new File(ctx.getCacheDir(), "update"), "Pizzadonia-update.apk");
+        String wanted = Uri.parse(url).getQueryParameter("v");
+        if (wanted != null && kept.isFile()) {
+            PackageInfo pi = ctx.getPackageManager().getPackageArchiveInfo(kept.getAbsolutePath(), 0);
+            if (pi != null && ctx.getPackageName().equals(pi.packageName) && wanted.equals(String.valueOf(PackageInfoCompat.getLongVersionCode(pi)))) {
+                downloadPercent = 100;
+                return kept;
+            }
+        }
+        return download(url);
     }
 
     private File download(String url) throws Exception {
@@ -183,6 +199,7 @@ public class PizzaAppPlugin extends Plugin {
                     if ((total += n) > 100L * 1024 * 1024) throw new Exception("Fail kemas kini terlalu besar.");
                     if (size > 0) downloadPercent = (int) Math.min(100, total * 100 / size);
                 }
+                if (size > 0 && total != size) throw new Exception("Muat turun terputus. Cuba lagi.");
             }
             return out;
         } finally {

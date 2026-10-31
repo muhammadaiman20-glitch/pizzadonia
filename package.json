@@ -13,7 +13,7 @@
     "test:cloud": "node --test tests/cloud.test.mjs tests/telegram.test.mjs tests/ops.test.mjs tests/login.test.mjs tests/applogin.test.mjs tests/marketing.test.mjs tests/social.test.mjs",
     "build:backend": "npm run prepare:cloud && wrangler deploy --dry-run --outdir .cloud-build",
     "deploy:backend": "npm run prepare:cloud && wrangler deploy --keep-vars",
-    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name pizzadonia"
+    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name pizzadonia --branch main"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

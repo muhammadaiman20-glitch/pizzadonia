@@ -72,7 +72,7 @@ export const appUpdater = createUpdater({
 const useUpdate = () => useSyncExternalStore(appUpdater.subscribe, appUpdater.get)
 const updateRequired = () => appUpdater.get().state === 'update' && !appUpdater.get().deferred
 // the phone's Back button asks this first (see MainActivity)
-if (typeof window !== 'undefined') window.pizzaUpdateRequired = updateRequired
+if (typeof window !== 'undefined') window.pizzaUpdateRequired = () => !!document.querySelector('dialog.update-sheet')?.open
 
 const SHEET = {
   ready: { title: 'Kemas kini diperlukan', go: 'Kemas kini' },
