@@ -8,7 +8,7 @@ import { PAY_STATUS, shrink } from '../components/PaymentPanel.jsx'
 import { TX } from './Wallet.jsx'
 import { autoRefresh, adminHeaders, api, appRole, ownerSession, rm, useAutoSubmit, useShop, waLink } from '../lib.js'
 import GoogleButton from '../components/GoogleButton.jsx'
-import { SellerAppLogin } from '../components/AppBits.jsx'
+import { AppUpdateCard, SellerAppLogin } from '../components/AppBits.jsx'
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../workers-ai.js'
 import { DEFAULT_OPS_MODEL, OPS_MODELS } from '../../ops-assistant.js'
 import { withTxPin } from '../components/PinPrompt.jsx'
@@ -1658,6 +1658,7 @@ function ShopSettings({ pin }) {
         </Field>
       </section>
       <PaymentSettings s={s} setS={setS} pin={pin} />
+      <AppUpdateCard />
       <GoogleSettings s={s} setS={setS} />
       <TelegramSettings s={s} setS={setS} pin={pin} />
       <WhatsAppLogin pin={pin} />

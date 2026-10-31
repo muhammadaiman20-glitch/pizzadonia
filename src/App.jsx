@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { appRole, useRoute, useShop } from './lib.js'
-import { AppUpdateBar } from './components/AppBits.jsx'
+import { AppUpdateBar, AppUpdateCard } from './components/AppBits.jsx'
 import AppLogin from './pages/AppLogin.jsx'
 import { PinPromptHost } from './components/PinPrompt.jsx'
 import SupportChat from './components/SupportChat.jsx'
@@ -30,6 +30,7 @@ export default function App() {
         </div>
       )}
       <Page />
+      {appRole === 'customer' && path === '/akaun' && <div className="mx-auto max-w-xl px-4 pb-8"><AppUpdateCard /></div>}
       {!staffPage && <SupportChat />}
       <PinPromptHost />
     </>
