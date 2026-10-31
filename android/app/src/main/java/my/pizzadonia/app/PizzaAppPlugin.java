@@ -33,6 +33,8 @@ import java.util.regex.Pattern;
  */
 @CapacitorPlugin(name = "PizzaApp")
 public class PizzaAppPlugin extends Plugin {
+    /** 0 to 100 while downloading; -1 when the size is unknown. */
+    private static volatile int downloadPercent = -1;
     static final String SITE = "https://pizzadonia.pages.dev/";
     private static final Pattern LOGIN_URI = Pattern.compile("^my\\.pizzadonia\\.(?:app|seller)://login\\?code=([A-Za-z0-9_-]{16,128})$");
     private static volatile String loginCode;
@@ -110,6 +112,20 @@ public class PizzaAppPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void progress(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("percent", downloadPercent);
+        call.resolve(out);
+    }
+
+    /** The user chose not to update: the app closes. */
+    @PluginMethod
+    public void exit(PluginCall call) {
+        call.resolve();
+        if (getActivity() != null) getActivity().runOnUiThread(() -> getActivity().finishAndRemoveTask());
+    }
+
+    @PluginMethod
     public void install(PluginCall call) {
         String url = call.getString("url");
         if (!allowedApk(url, isSeller())) {
@@ -160,10 +176,12 @@ public class PizzaAppPlugin extends Plugin {
             File out = new File(dir, "Pizzadonia-update.apk");
             try (InputStream in = c.getInputStream(); OutputStream os = new FileOutputStream(out)) {
                 byte[] buf = new byte[64 * 1024];
-                long total = 0;
+                long total = 0, size = c.getContentLengthLong();
+                downloadPercent = size > 0 ? 0 : -1;
                 for (int n; (n = in.read(buf)) > 0; ) {
                     os.write(buf, 0, n);
                     if ((total += n) > 100L * 1024 * 1024) throw new Exception("Fail kemas kini terlalu besar.");
+                    if (size > 0) downloadPercent = (int) Math.min(100, total * 100 / size);
                 }
             }
             return out;

@@ -8,6 +8,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     /** 1 = the page handled back (closed a sheet or went one page back), 0 = already on the home page. */
     private static final String BACK_JS = "(function(){try{"
+            + "if(window.pizzaUpdateRequired&&window.pizzaUpdateRequired())return 1;"
             + "var c=document.querySelectorAll('.fixed.inset-0 [aria-label=\"Tutup\"],.fixed.inset-0 [aria-label=\"Close\"]');if(c.length){c[c.length-1].click();return 1;}"
             + "var q=document.querySelector('[aria-label=\"QR pembayaran\"]');if(q){q.click();return 1;}"
             + "var h=location.hash;if(h&&h!=='#'&&h!=='#/'&&h!=='#/admin'){history.back();return 1;}"

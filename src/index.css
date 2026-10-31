@@ -78,3 +78,20 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .pop, .rise, .spin-slow, .tg-flow { animation: none; }
 }
+
+dialog.update-sheet { width: 100%; max-width: 520px; margin: auto auto 0; padding: 24px 20px calc(20px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); border: 0; border-radius: 20px 20px 0 0; background: var(--color-paper); color: var(--color-ink); outline: 0; }
+dialog.update-sheet::backdrop { background: rgb(0 0 0 / 0.6); }
+.update-go, .update-leave, .update-use { width: 100%; min-height: 50px; border: 0; outline: 0; border-radius: 12px; font-weight: 700; font-size: 15px; }
+.update-go, .update-leave { color: #fff; }
+.update-go { background: #1f7a4d; }
+.update-leave { background: #b23a30; }
+.update-use { background: var(--color-line); color: var(--color-ink); }
+.update-go:focus-visible, .update-leave:focus-visible, .update-use:focus-visible { outline: 2px solid currentColor; outline-offset: -5px; }
+.update-track { height: 8px; border-radius: 99px; background: var(--color-line); overflow: hidden; }
+.update-track i { display: block; height: 100%; border-radius: inherit; background: #1f7a4d; transition: width 0.3s ease-out; }
+.update-track.unknown i { width: 35% !important; animation: update-slide 1.2s ease-in-out infinite alternate; }
+@keyframes update-slide { from { margin-left: 0; } to { margin-left: 65%; } }
+@media (prefers-reduced-motion: reduce) {
+  .update-track i { transition: none; }
+  .update-track.unknown i { animation: none; width: 100% !important; opacity: 0.45; }
+}
