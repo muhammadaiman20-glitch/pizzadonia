@@ -32,7 +32,7 @@
     "miniflare": "5.20261012.0-beta",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.2",
-    "wrangler": "4.151.0"
+    "wrangler": "^4.156.0"
   },
   "engines": {
     "node": ">=22.12.0"
