@@ -53,6 +53,8 @@ const SETTINGS_SEED = {
   // welcome gift: amount into the wallet when a NEW customer's first order is delivered; spendable on an order
   // of at least minOrder. Once per phone number, ever.
   welcome: { active: false, amount: 5, minOrder: 20 },
+  // real customer words the owner typed in, shown on the shop only with the customer's permission
+  reviews: [],
   cashback: { active: false, percent: 10, start: '', end: '', minOrder: 0, maxPerOrder: 0, exclude: [] }, // exclude = product ids with no cashback
   // support chat AI: Cloudflare Workers AI (cloud only). Plain chat, no tools; off = built-in replies only.
   aiChat: { enabled: true, model: AI_MODELS[0].id },
@@ -272,6 +274,7 @@ const publicShop = () => ({
   shop: settings.shop, delivery: settings.delivery, menu: publicMenu(), payment: publicPayment(), googleClientId: settings.googleClientId || '', cloudHosted: true,
   login: { wa: waReady(), tg: tgLoginReady() }, // phone login channels; WhatsApp on = no more PIN login
   welcome: settings.welcome.active && settings.welcome.amount > 0 ? { amount: settings.welcome.amount, minOrder: settings.welcome.minOrder } : null,
+  reviews: (settings.reviews || []).filter((r) => r.visible).slice(0, 6).map(({ id, name, area, text }) => ({ id, name, area, text })),
   cashback: cashbackLive() ? { percent: settings.cashback.percent, end: settings.cashback.end, minOrder: settings.cashback.minOrder, maxPerOrder: settings.cashback.maxPerOrder, exclude: settings.cashback.exclude || [] } : null,
 })
 // ---- cashback campaign
@@ -1331,6 +1334,30 @@ app.patch('/api/admin/promos/:code', admin, (req, res) => {
   else p.active = Boolean(req.body?.active)
   savePromos()
   res.json({ ok: true })
+})
+// ---- customer reviews: typed in by the owner, and only with the customer's permission
+app.post('/api/admin/reviews', admin, (req, res) => {
+  const b = req.body || {}
+  const name = clean(b.name, 40), area = clean(b.area, 40), text = clean(b.text, 280)
+  if (name.length < 2 || text.length < 5) return res.status(400).json({ error: 'Enter the customer name and their words' })
+  if (b.consent !== true) return res.status(400).json({ error: 'Confirm the customer allowed this first' })
+  settings.reviews ||= []
+  if (settings.reviews.length >= 50) return res.status(400).json({ error: 'Limit is 50 reviews. Delete an old one first.' })
+  settings.reviews.unshift({ id: crypto.randomUUID(), name, area, text, visible: true, at: new Date().toISOString() })
+  save('settings.json', settings)
+  res.json({ reviews: settings.reviews })
+})
+app.patch('/api/admin/reviews/:id', admin, (req, res) => {
+  const r = (settings.reviews || []).find((x) => x.id === req.params.id)
+  if (!r) return res.status(404).json({ error: 'Not found' })
+  r.visible = Boolean(req.body?.visible)
+  save('settings.json', settings)
+  res.json({ reviews: settings.reviews })
+})
+app.delete('/api/admin/reviews/:id', admin, (req, res) => {
+  settings.reviews = (settings.reviews || []).filter((x) => x.id !== req.params.id)
+  save('settings.json', settings)
+  res.json({ reviews: settings.reviews })
 })
 // ---- customers (admin has full control): registered accounts + guests who ordered without an account
 app.get('/api/admin/customers', admin, (_req, res) => {

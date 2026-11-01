@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Banknote, Bike, Flame, MapPin, Minus, Plus, ShoppingBag, Store, Trash2, UserRound, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowRight, Banknote, Bike, Check, Flame, Loader2, MapPin, Minus, Plus, Quote, ShoppingBag, Store, Trash2, UserRound, X } from 'lucide-react'
 import Logo from '../components/Logo.jsx'
-import { cartApi, cartKey, cartLines, fmtDay, go, appRole, ownerSession, rm, store, useAccount, useCart, useShop } from '../lib.js'
+import MapPicker from '../components/MapPicker.jsx'
+import { api, cartApi, cartKey, cartLines, fmtDay, go, appRole, ownerSession, rm, store, useAccount, useCart, useShop } from '../lib.js'
 
 
 export function Header({ onCart, count }) {
@@ -173,11 +174,75 @@ export function CartDrawer({ open, onClose, menu }) {
   )
 }
 
+/** Pin a place and see straight away whether we deliver there and the fee. The pin carries on to checkout. */
+function AreaCheck({ open, onClose, shop }) {
+  const saved = store.get('pz.customer', {})
+  const [point, setPoint] = useState(saved.point || null)
+  const [address, setAddress] = useState('')
+  const [q, setQ] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const ask = useRef(0)
+  const check = async (p) => {
+    const mine = ++ask.current
+    setBusy(true)
+    setErr('')
+    setQ(null)
+    try {
+      const r = await api('/api/quote', { method: 'POST', body: p })
+      if (mine === ask.current) setQ(r)
+    } catch {
+      if (mine === ask.current) setErr('Tidak dapat menyemak sekarang. Semak internet dan cuba lagi.')
+    }
+    if (mine === ask.current) setBusy(false)
+  }
+  useEffect(() => {
+    if (!open) return undefined
+    if (point) check(point)
+    const k = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    document.body.style.overflow = 'hidden'
+    return () => (window.removeEventListener('keydown', k), (document.body.style.overflow = ''))
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!open) return null
+  const toMenu = () => {
+    const now = store.get('pz.customer', {})
+    store.set('pz.customer', { ...now, point, address: now.address || address })
+    onClose()
+    document.getElementById('menu')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-[2px] sm:items-center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="rise max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-paper p-4 shadow-2xl sm:rounded-[28px]" role="dialog" aria-modal="true" aria-labelledby="areaTitle" style={{ paddingBottom: 'max(1rem, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="areaTitle" className="font-display text-2xl tracking-wide">Semak kawasan saya</h2>
+          <button onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-full hover:bg-cream" aria-label="Tutup"><X className="size-5" /></button>
+        </div>
+        <MapPicker value={point} shop={shop?.shop} height={280} hint="Tekan peta atau cari tempat anda" onAddress={setAddress} onChange={(p) => { setPoint(p); check(p) }} />
+        <div className="mt-3 min-h-[92px]" role="status" aria-live="polite">
+          {busy && <p className="flex items-center gap-2 p-3 text-[14px] text-muted"><Loader2 className="size-4 animate-spin" /> Menyemak kawasan…</p>}
+          {err && <div className="rounded-2xl bg-tomato/10 p-3 text-[14px] text-tomato"><p>{err}</p><button className="btn btn-ghost mt-2 px-4 py-2.5 text-[13.5px]" onClick={() => check(point)}>Cuba lagi</button></div>}
+          {!busy && !err && !q && <p className="p-3 text-[14px] text-muted">Pin lokasi anda untuk melihat caj hantar.</p>}
+          {!busy && q && !q.ok && <p className="rounded-2xl bg-tomato/10 p-3 text-[14px] font-semibold text-tomato">{q.reason}</p>}
+          {!busy && q?.ok && (
+            <div className="rounded-2xl bg-basil/10 p-3">
+              <p className="flex items-center gap-2 text-[15px] font-bold text-basil"><Check className="size-5" /> Kami hantar ke sini</p>
+              <p className="mt-1 text-[14px] tabular-nums">Caj hantar {q.method === 'estimate' ? 'anggaran ' : ''}{rm(q.fee)} · {q.km} km</p>
+              <button className="btn btn-red mt-3 w-full py-3 text-[14px]" onClick={toMenu}>Pilih pizza <ArrowRight className="size-4" /></button>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function Shop() {
   const { shop, error } = useShop()
   const cart = useCart()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [area, setArea] = useState(false)
   const menu = shop?.menu ?? []
   const lines = cartLines(cart, menu)
   const count = lines.reduce((s, l) => s + l.qty, 0)
@@ -186,6 +251,9 @@ export default function Shop() {
   const prices = [...new Set(menu.map((m) => m.price))].sort((a, b) => a - b)
   const FILTERS = [{ id: 'all', label: 'Semua' }, ...prices.map((p, i) => ({ id: p, label: i === prices.length - 1 && prices.length > 2 ? 'Premium' : rm(p) }))]
   const shown = useMemo(() => (filter === 'all' ? menu : menu.filter((m) => m.price === filter)), [menu, filter])
+  // the owner marks these with the label "Paling laris" on the Menu tab
+  const best = filter === 'all' ? menu.filter((m) => m.available && /paling laris/i.test(m.tag || '')) : []
+  const rest = shown.filter((m) => !best.includes(m))
   const from = prices.length ? rm(prices[0]) : ''
   const acc = useAccount()
   const myOrders = acc?.orders?.length ? acc.orders.filter((o) => !['done', 'cancelled'].includes(o.status)).slice(0, 3) : store.get('pz.orders', []).slice(0, 3)
@@ -213,11 +281,12 @@ export default function Shop() {
                 Cashback ke dompet · hingga {fmtDay(shop.cashback.end)}
               </a>
             )}
+            <p className="mb-2 flex items-center gap-1.5 text-[14px] font-bold text-crust"><MapPin className="size-4" /> Penghantaran sekitar Kuala Terengganu</p>
             <h1 className="font-display text-[44px] leading-[1.02] tracking-wide sm:text-6xl">
               Pizza panas, <span className="text-tomato">terus ke pintu</span> rumah anda.
             </h1>
             <p className="mt-4 max-w-md text-[16px] leading-relaxed text-muted">
-              Pilih pizza, pin lokasi pada peta, dan bayar tunai bila pizza sampai. Senang, tiada kad diperlukan.
+              {from ? `Pizza dari ${from}. ` : ''}Pilih pizza, pin lokasi pada peta, dan bayar tunai bila pizza sampai. Senang, tiada kad diperlukan.
             </p>
             <div className="mt-6 flex flex-wrap gap-2.5">
               {[
@@ -230,9 +299,14 @@ export default function Shop() {
                 </span>
               ))}
             </div>
-            <a href="#menu" className="btn btn-red mt-7 px-7 py-3.5 text-[15px]">
-              Lihat menu <ArrowRight className="size-4" />
-            </a>
+            <div className="mt-7 flex flex-wrap gap-2.5">
+              <a href="#menu" className="btn btn-red px-7 py-3.5 text-[15px]">
+                Order sekarang <ArrowRight className="size-4" />
+              </a>
+              <button type="button" onClick={() => setArea(true)} className="btn btn-ghost px-5 py-3.5 text-[15px]">
+                <MapPin className="size-4 text-tomato" /> Semak kawasan saya
+              </button>
+            </div>
           </div>
           <div className="relative mx-auto aspect-square w-full max-w-[420px]">
             <div className="absolute inset-[6%] rounded-full bg-cheese/40 blur-2xl" />
@@ -290,11 +364,38 @@ export default function Shop() {
             ))}
           </div>
         )}
-        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {shown.map((m, i) => (
+        {best.length > 0 && (
+          <>
+            <h3 className="mt-7 flex items-center gap-2 font-display text-2xl tracking-wide"><Flame className="size-5 text-tomato" /> Paling laris</h3>
+            <div className="mt-3 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {best.map((m, i) => (
+                <PizzaCard key={m.id} item={m} cart={cart} i={i} noCashback={Boolean(shop?.cashback?.exclude?.includes(m.id))} />
+              ))}
+            </div>
+            <h3 className="mt-9 font-display text-2xl tracking-wide">Semua pizza</h3>
+          </>
+        )}
+        <div className={`${best.length ? 'mt-3' : 'mt-6'} grid gap-5 sm:grid-cols-2 lg:grid-cols-3`}>
+          {rest.map((m, i) => (
             <PizzaCard key={m.id} item={m} cart={cart} i={i} noCashback={Boolean(shop?.cashback?.exclude?.includes(m.id))} />
           ))}
         </div>
+
+        {/* what real customers said; hidden until the owner adds one */}
+        {shop?.reviews?.length > 0 && (
+          <section className="mt-16" aria-labelledby="reviewsTitle">
+            <h2 id="reviewsTitle" className="font-display text-3xl tracking-wide">Kata pelanggan</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {shop.reviews.map((r) => (
+                <figure key={r.id} className="card m-0 p-5">
+                  <Quote className="size-5 text-crust" aria-hidden="true" />
+                  <blockquote className="mt-2 text-[14.5px] leading-relaxed">{r.text}</blockquote>
+                  <figcaption className="mt-3 text-[13px] font-bold text-muted">{r.name}{r.area ? ` · ${r.area}` : ''}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* how it works */}
         <section className="mt-16 grid gap-4 sm:grid-cols-3">
@@ -321,7 +422,7 @@ export default function Shop() {
       {count > 0 && (
         <div className="safe-bottom fixed inset-x-0 bottom-0 z-40 px-3">
           <button
-            onClick={() => setOpen(true)}
+            onClick={() => go('/checkout')}
             className="rise mx-auto flex w-full max-w-xl items-center justify-between gap-3 rounded-full bg-ink py-2.5 pl-5 pr-2.5 text-white shadow-2xl"
           >
             <span className="flex items-center gap-2.5 text-[14px] font-semibold">
@@ -329,12 +430,13 @@ export default function Shop() {
               pizza · {rm(subtotal)}
             </span>
             <span className="btn btn-red px-5 py-2.5 text-[14px] shadow-none">
-              Lihat troli <ArrowRight className="size-4" />
+              Checkout <ArrowRight className="size-4" />
             </span>
           </button>
         </div>
       )}
       <CartDrawer open={open} onClose={() => setOpen(false)} menu={menu} />
+      <AreaCheck open={area} onClose={() => setArea(false)} shop={shop} />
     </div>
   )
 }

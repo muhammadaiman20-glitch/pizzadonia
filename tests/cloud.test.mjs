@@ -84,6 +84,25 @@ await test('Cloudflare persistence and complete business flows', async t => {
     assert.equal((await call('/api/admin/ledger',{owner:true})).status,200)
     assert.equal((await call('/api/admin/cloud-backup',{owner:true})).data.version,1)
     assert.equal((await call('/api/admin/cloud-backup')).status,401)
+    await t.test('reviews need the customer permission and reach the shop only while visible',async()=>{
+      const shop=async()=>(await call('/api/shop')).data.reviews
+      const body={name:'Siti',area:'Kuala Nerus',text:'Pizza sampai panas.'}
+      assert.equal((await call('/api/admin/reviews',{method:'POST',body:{...body,consent:true}})).status,401)
+      assert.equal((await call('/api/admin/reviews',{method:'POST',owner:true,body})).status,400)
+      const made=await call('/api/admin/reviews',{method:'POST',owner:true,body:{...body,consent:true}})
+      assert.equal(made.status,200)
+      const id=made.data.reviews[0].id
+      assert.deepEqual(await shop(),[{id,...body}])
+      await call('/api/admin/reviews/'+id,{method:'PATCH',owner:true,body:{visible:false}})
+      assert.deepEqual(await shop(),[])
+      await call('/api/admin/reviews/'+id,{method:'DELETE',owner:true})
+      assert.equal((await call('/api/admin/settings',{owner:true})).data.reviews.length,0)
+    })
+    await t.test('anyone can check an area before ordering',async()=>{
+      const near=await call('/api/quote',{method:'POST',body:{lat:5.31,lng:103.11}})
+      assert.equal(near.data.ok,true)
+      assert.equal(near.data.fee,3)
+    })
     await t.test('customer wallets are preserved and concurrent spends cannot overdraw',async()=>{
       const auth={authorization:'Bearer '+customerToken}
       r=await call('/api/wallet/activate',{method:'POST',body:{name:'Test Buyer',bankName:'Maybank',accountNumber:'12345678'},headers:auth})

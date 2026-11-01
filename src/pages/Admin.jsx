@@ -1258,6 +1258,55 @@ function CashbackCard({ pin }) {
   )
 }
 
+function ReviewsCard({ pin }) {
+  const [list, setList] = useState(null)
+  const [f, setF] = useState({ name: '', area: '', text: '', consent: false })
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    api('/api/admin/settings', { pin }).then((s) => setList(s.reviews || [])).catch((e) => setMsg(e.message))
+  }, [pin])
+  const run = async (fn) => {
+    setMsg('')
+    try {
+      setList((await fn()).reviews)
+      return true
+    } catch (e) {
+      setMsg(e.message)
+      return false
+    }
+  }
+  const add = async () => {
+    if (await run(() => api('/api/admin/reviews', { method: 'POST', body: f, pin }))) setF({ name: '', area: '', text: '', consent: false })
+  }
+  return (
+    <section className="card space-y-3 p-5">
+      <h2 className="font-display text-xl tracking-wide">Customer reviews</h2>
+      <p className="text-[12.5px] text-muted">Only real words from real customers, with their permission. The shop shows the 6 newest visible reviews, and hides this section when there are none.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Customer name"><input className="field" value={f.name} maxLength={40} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Area (optional)"><input className="field" value={f.area} maxLength={40} onChange={(e) => setF({ ...f, area: e.target.value })} /></Field>
+      </div>
+      <Field label="What they said"><textarea className="field" rows={3} value={f.text} maxLength={280} onChange={(e) => setF({ ...f, text: e.target.value })} /></Field>
+      <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" className="mt-0.5 size-4" checked={f.consent} onChange={(e) => setF({ ...f, consent: e.target.checked })} /> This customer allowed me to show this on the shop</label>
+      <div className="flex items-center gap-3">
+        <button className="btn btn-red px-5 py-2.5 text-[13.5px]" onClick={add}><Plus className="size-4" /> Add review</button>
+        {msg && <span role="alert" className="text-[13px] font-semibold text-tomato">{msg}</span>}
+      </div>
+      {list?.length === 0 && <p className="text-[13px] text-muted">No reviews yet.</p>}
+      {list?.map((r) => (
+        <div key={r.id} className="rounded-2xl border border-line p-3">
+          <p className="text-[13.5px]">{r.text}</p>
+          <p className="mt-1 text-[12px] font-bold text-muted">{r.name}{r.area ? ` · ${r.area}` : ''}{r.visible ? '' : ' · hidden'}</p>
+          <div className="mt-2 flex gap-2">
+            <button className="btn btn-ghost px-3 py-2 text-[12.5px]" onClick={() => run(() => api(`/api/admin/reviews/${r.id}`, { method: 'PATCH', body: { visible: !r.visible }, pin }))}>{r.visible ? 'Hide' : 'Show'}</button>
+            <button className="btn btn-ghost px-3 py-2 text-[12.5px] text-tomato" onClick={() => confirm('Delete this review?') && run(() => api(`/api/admin/reviews/${r.id}`, { method: 'DELETE', pin }))}>Delete</button>
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function WelcomeCard({ pin }) {
   const [w, setW] = useState(null)
   const [msg, setMsg] = useState('')
@@ -1965,7 +2014,7 @@ function ProductForm({ initial = EMPTY, photoUrl, onSave, onCancel, saveLabel, b
       </div>
       <div className="grid content-start gap-3 sm:grid-cols-2">
         <Field label="Product name"><input className="field" value={f.name} onChange={(e) => set('name', e.target.value)} maxLength={40} placeholder="e.g. Pepperoni" /></Field>
-        <Field label="Label (optional)" hint="e.g. Baru! / Paling laris / Premium"><input className="field" value={f.tag} onChange={(e) => set('tag', e.target.value)} maxLength={30} /></Field>
+        <Field label="Label (optional)" hint="e.g. Baru! / Premium. Paling laris puts it in the top section of the shop."><input className="field" value={f.tag} onChange={(e) => set('tag', e.target.value)} maxLength={30} /></Field>
         <div className="sm:col-span-2">
           <Field label="Description (customers see this)"><textarea className="field min-h-16" value={f.desc} onChange={(e) => set('desc', e.target.value)} maxLength={200} placeholder="Toppings, size…" /></Field>
         </div>
@@ -2055,6 +2104,7 @@ function MenuAdmin({ pin }) {
           <ProductForm saveLabel="Add to menu" busy={busy === 'new'} onSave={add} onCancel={() => setEditing('')} />
         </section>
       )}
+      <ReviewsCard pin={pin} />
       <ul className="space-y-3">
         {menu.map((m, i) => (
           <li key={m.id} className={`card p-4 ${m.available ? '' : 'opacity-75'}`}>
