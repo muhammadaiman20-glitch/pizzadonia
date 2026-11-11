@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /apk/
+
+Sitemap: https://pizzadonia.pages.dev/sitemap.xml
