@@ -161,7 +161,7 @@ Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
-Tag seperti `v1.1.0` akan membina APK dan melampirkannya pada **GitHub Release**.
+Tag seperti `v1.2.0` akan membina APK dan melampirkannya pada **GitHub Release**.
 
 ### Kunci tandatangan
 
@@ -196,33 +196,43 @@ Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
 
 ```json
 {
-  "customer": { "versionName": "1.1.0", "url": "/download/Pizzadonia-Pelanggan.apk" },
-  "seller": { "versionName": "1.1.0", "url": "/download/Pizzadonia-Penjual.apk" }
+  "customer": { "versionName": "1.2.0", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.2.0", "url": "/download/Pizzadonia-Penjual.apk" }
 }
 ```
 
-Jika `versionName` dalam manifest lebih baharu daripada versi APK yang dipasang, app memaparkan pemberitahuan **Kemas kini tersedia**. Butang **Muat turun** membuka pelayar sistem untuk memuat turun APK; Android kemudian meminta pengesahan pemasangan. Pengguna boleh menutup pemberitahuan untuk versi tersebut.
+Jika `versionName` dalam manifest lebih baharu daripada versi APK yang dipasang, app Android:
+
+1. Memuat turun APK secara automatik di latar belakang (dengan bar kemajuan).
+2. Meminta kebenaran **Install unknown apps** sekali sahaja jika belum diberi.
+3. Membuka pemasang sistem Android secara automatik.
+
+Pengguna hanya perlu menekan **Install**. Android **tidak membenarkan** pemasangan senyap sepenuhnya untuk app sideload (hanya app sistem, device owner, atau app dari Play Store boleh melakukannya). Pemberitahuan kemas kini boleh ditutup untuk versi tersebut; butang **Pasang** membolehkan cubaan semula tanpa memuat turun semula.
+
+Plugin native: `android/app/src/main/java/com/pizzadonia/app/AppUpdaterPlugin.java` (didaftarkan dalam `MainActivity.java`, permission `REQUEST_INSTALL_PACKAGES`, fail dikongsi melalui `FileProvider`).
 
 `versionCode` APK sentiasa meningkat (cap masa Unix atau `VERSION_CODE`), jadi Android menerima APK baharu sebagai kemas kini. `versionName` diambil daripada `package.json` supaya manifest dan APK sentiasa sepadan.
 
 Langkah mengeluarkan versi baharu:
 
-1. Naikkan `version` dalam `package.json` (contoh `1.1.1`).
+1. Naikkan `version` dalam `package.json` (contoh `1.2.1`).
 2. Bina APK: `npx cap sync android`, kemudian `./gradlew assembleCustomerDebug assembleSellerDebug` (atau release).
 3. Salin APK ke `release/Pizzadonia-Pelanggan.apk` dan `release/Pizzadonia-Penjual.apk`.
 4. Deploy: `npm run deploy` dan `npm run deploy:pages`. Manifest `/app-version.json` dijana secara automatik.
-
-Pilihan: cipta GitHub Release untuk arkib versi —
+5. Pilihan: cipta GitHub Release untuk arkib versi.
 
 ```sh
-gh release create v1.1.0 release/Pizzadonia-Pelanggan.apk release/Pizzadonia-Penjual.apk
+VERSION=$(node -p "require('./package.json').version")
+gh release create "v$VERSION" release/Pizzadonia-Pelanggan.apk release/Pizzadonia-Penjual.apk
 ```
+
+> **Kemas kini kali pertama:** APK 1.1.0 dan lebih awal hanya mempunyai butang muat turun manual. Selepas memasang APK 1.2.0 sekali, kemas kini seterusnya berjalan secara automatik (muat turun + pemasang terbuka).
 
 Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
 
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.1.0
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.1.0/Pizzadonia-Pelanggan.apk
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.1.0/Pizzadonia-Penjual.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.0
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.0/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.0/Pizzadonia-Penjual.apk
 
 Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
