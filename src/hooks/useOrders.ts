@@ -15,7 +15,11 @@ import {
 import { newOrderId } from '../lib/format'
 import type { NewOrder, Order, PaymentStatus } from '../types'
 
-const ORDERS_KEY = 'pizzadonia.orders.v1'
+// Kunci baharu: cache lama (`v1`) mungkin mengandungi 6 tempahan demo yang
+// dimasukkan secara automatik oleh versi sebelum ini. Naikkan versi kunci
+// supaya data demo itu tidak dimuatkan lagi.
+const ORDERS_KEY = 'pizzadonia.orders.v2'
+const LEGACY_KEYS = ['pizzadonia.orders.v1', 'pizzadonia.orders.seeded.v1']
 
 function parseOrders(raw: string | null): Order[] {
   if (!raw) return []
@@ -33,6 +37,8 @@ function parseOrders(raw: string | null): Order[] {
 }
 
 function loadOrders(): Order[] {
+  // Buang cache lama yang mungkin mengandungi tempahan demo.
+  for (const key of LEGACY_KEYS) localStorage.removeItem(key)
   return parseOrders(localStorage.getItem(ORDERS_KEY))
 }
 

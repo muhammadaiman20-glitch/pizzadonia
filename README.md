@@ -392,7 +392,7 @@ Oleh itu UI hanya memaparkan **QR asal** dan pelanggan menaip jumlah secara manu
 
 - D1 bermula kosong — tiada tempahan contoh. Tempahan sebenar pelanggan sahaja yang direkodkan.
 - Butang **padam semua** mengosongkan table D1 (memerlukan sesi penjual yang sah).
-- Cache localStorage: `pizzadonia.orders.v1`, `pizzadonia.cart.v1`; token sesi penjual: `pizzadonia.seller.token` (sessionStorage).
+- Cache localStorage: `pizzadonia.orders.v2`, `pizzadonia.cart.v1`; token sesi penjual: `pizzadonia.seller.token` (sessionStorage). Cache `pizzadonia.orders.v1` lama (yang mungkin mengandungi data demo) dipadam secara automatik.
 
 ## Struktur
 
