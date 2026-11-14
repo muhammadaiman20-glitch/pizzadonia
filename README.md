@@ -36,10 +36,13 @@ Satu Worker menghidangkan laman statik (`dist/`) dan API `/api` pada origin yang
 Prasyarat: Node.js **22.12+** untuk Wrangler (fail `.nvmrc` disediakan) dan akaun Cloudflare yang sudah login (`npx wrangler login`, atau `wrangler login --device` dalam container/SSH).
 
 ```sh
-npx wrangler secret put ADMIN_PIN   # PIN dashboard produksi, cth. 4821
-npm run db:init                     # cipta table pizzadonia_orders (sekali sahaja)
-npm run deploy                      # build + salin APK ke dist/download + wrangler deploy
+npx wrangler secret put ADMIN_PIN    # PIN akaun penjual produksi, cth. 4821 (wajib)
+npx wrangler secret put AUTH_SECRET  # pilihan: kunci tandatangan token sesi
+npm run db:init                      # cipta table pizzadonia_orders (sekali sahaja)
+npm run deploy                       # build + salin APK ke dist/download + wrangler deploy
 ```
+
+Tiada PIN lalai: jika `ADMIN_PIN` tidak ditetapkan, log masuk penjual akan gagal (`503`).
 
 URL selepas deploy:
 
@@ -62,28 +65,36 @@ Had D1 Free plan ialah 10 pangkalan data dan akaun ini sudah penuh (10/10), jadi
 
 ### API
 
-Laluan **awam** tidak memerlukan PIN dan tidak mendedahkan senarai penuh tempahan:
+Laluan **awam** tidak memerlukan log masuk dan tidak mendedahkan senarai penuh tempahan:
 
 | Kaedah | Laluan | Auth | Fungsi |
 | --- | --- | --- | --- |
 | `GET` | `/api/health` | – | Semakan hidup |
+| `POST` | `/api/auth/login` | PIN | Tukar PIN kepada token sesi penjual |
 | `POST` | `/api/orders` | – | Cipta tempahan (pelanggan) |
 | `GET` | `/api/orders/lookup?q=` | – | Cari ikut no. tempahan / telefon |
 | `GET` | `/api/orders/:id` | – | Baca satu tempahan |
 | `POST` | `/api/orders/:id/payment` | – | Pelanggan sahkan bayaran (`unpaid → pending`) |
 
-Laluan **admin** memerlukan header `x-admin-pin`:
+Laluan **penjual** memerlukan `Authorization: Bearer <token>` daripada `/api/auth/login`:
 
 | Kaedah | Laluan | Auth | Fungsi |
 | --- | --- | --- | --- |
-| `GET` | `/api/orders` | PIN | Senarai semua tempahan |
-| `PATCH` | `/api/orders/:id` | PIN | Tukar `status` / `paymentStatus` |
-| `DELETE` | `/api/orders/:id` | PIN | Padam tempahan |
-| `POST` | `/api/orders/reset` | PIN | Ganti semua (demo / padam semua) |
+| `GET` | `/api/orders` | Token | Senarai semua tempahan |
+| `PATCH` | `/api/orders/:id` | Token | Tukar `status` / `paymentStatus` |
+| `DELETE` | `/api/orders/:id` | Token | Padam tempahan |
+| `POST` | `/api/orders/reset` | Token | Ganti semua (padam semua) |
 
-Hanya dashboard menghantar PIN. Halaman awam (checkout, tempahan, jejak) menggunakan laluan awam sahaja. Pelanggan tidak boleh menetapkan status `paid`; hanya penjual boleh menandakan bayaran diterima. Cipta tempahan sentiasa bermula `baru`/`unpaid` dan jumlah disemak terhadap harga item.
+Hanya dashboard menghantar token selepas log masuk. Halaman awam (checkout, tempahan, jejak) menggunakan laluan awam sahaja. Pelanggan tidak boleh menetapkan status `paid`; hanya penjual boleh menandakan bayaran diterima. Cipta tempahan sentiasa bermula `baru`/`unpaid` dan jumlah disemak terhadap harga item.
 
-Tukar **kedua-dua** `SHOP.adminPin` dalam `src/config.ts` dan secret `ADMIN_PIN` supaya sama.
+PIN penjual **tidak berada dalam bundle**. Ia disimpan sebagai secret Worker:
+
+```sh
+npx wrangler secret put ADMIN_PIN    # PIN akaun penjual, cth. 4821
+npx wrangler secret put AUTH_SECRET  # pilihan: kunci tandatangan token
+```
+
+Jika `ADMIN_PIN` tidak ditetapkan, log masuk gagal tertutup (`503`) — tiada PIN lalai. `AUTH_SECRET` (jika ada) menandatangan token supaya menukar PIN tidak membatalkan sesi sedia ada. Token sah selama 12 jam dan cubaan log masuk dihadkan kepada 8 kali / 15 minit bagi setiap alamat IP.
 
 ### Mod data: awan vs peranti
 
@@ -97,7 +108,7 @@ VITE_API_BASE=https://pizzadonia.muhammadaiman20.workers.dev/api npm run dev
 
 `VITE_API_BASE=off` memaksa mod localStorage walaupun dalam build produksi.
 
-> Keselamatan: PIN masih berada dalam bundle `src/config.ts` (sama seperti sebelum ini), tetapi kini hanya dihantar pada panggilan admin. Laluan awam tidak boleh menyenaraikan semua tempahan. Untuk keselamatan sebenar, letakkan dashboard di belakang Cloudflare Access atau auth server-side. Endpoint `POST /api/orders` sengaja awam supaya pelanggan boleh menempah; ia belum ada rate limit.
+> Keselamatan: PIN penjual hanya dihantar sekali ke `/api/auth/login` dan disemak di pelayan. Selepas itu dashboard menggunakan token sesi yang ditandatangan HMAC. Laluan awam tidak boleh menyenaraikan semua tempahan. Untuk lapisan tambahan, letakkan dashboard di belakang Cloudflare Access. Endpoint `POST /api/orders` sengaja awam supaya pelanggan boleh menempah; ia belum ada rate limit.
 
 ### Cloudflare Pages (UI + API Worker)
 
@@ -281,10 +292,8 @@ APK terhasil di:
 | `#/checkout` | Borang tempahan + ringkasan |
 | `#/order/:id` | Halaman tempahan berjaya + status |
 | `#/track` | Jejak tempahan ikut no. tempahan atau telefon |
-| `/seller` atau `/seller.html` | Dashboard penjual (PIN) — halaman berasingan, tiada pautan pada laman pelanggan |
+| `/seller` atau `/seller.html` | Dashboard penjual (log masuk PIN) — halaman berasingan, tiada pautan pada laman pelanggan |
 | `/download.html` | Muat turun APK pelanggan dan penjual |
-
-**PIN dashboard demo:** `0000`
 
 ## Tetapan
 
@@ -292,7 +301,6 @@ Edit `src/config.ts`:
 
 ```ts
 whatsapp: '601162260552' // nombor WhatsApp kedai (format antarabangsa)
-adminPin: '0000'        // tukar PIN dashboard
 delivery: { fee: 3, freeAbove: 60, maxKm: 15 }
 payment: {
   duitnowQr: '0002…589E',              // payload QR DuitNow penjual
@@ -373,18 +381,18 @@ Oleh itu UI hanya memaparkan **QR asal** dan pelanggan menaip jumlah secara manu
    - **Tunai / Transfer** → butiran tempahan terus dibuka dalam WhatsApp.
    - **QR DuitNow** → tempahan disimpan dahulu, QR asal dipaparkan (jumlah dimasukkan manual), dan WhatsApp hanya dibuka selepas pelanggan tekan **Saya sudah bayar**.
 5. Tempahan disimpan dengan status **Baru** — ke Cloudflare D1 jika API tersedia, jika tidak ke localStorage peranti.
-6. Penjual buka `#/dashboard`, masukkan PIN, dan kemas kini status:
+6. Penjual buka `/seller`, log masuk dengan PIN akaun penjual, dan kemas kini status:
    `Baru → Diterima → Sedang Dibakar → Sedia → Selesai` (atau Batal).
 7. Penjual sahkan bayaran QR pada kad tempahan selepas duit masuk.
 8. Pelanggan boleh jejak status di `#/track` menggunakan no. tempahan.
 
 > Nota: dalam mod localStorage (dev/preview/offline), tempahan tidak dihantar ke server dan hanya ada pada browser/peranti yang sama. Dalam mod Cloudflare, semua peranti berkongsi data D1 yang sama.
 
-## Data ujian
+## Data produksi
 
-- **Mod Cloudflare**: D1 bermula kosong. Butang **muat semula demo** menghantar 6 tempahan demo ke D1; **padam semua** mengosongkan table.
-- **Mod localStorage**: 6 tempahan demo dimasukkan secara automatik pada kali pertama.
-- Kunci localStorage (cache): `pizzadonia.orders.v1`, `pizzadonia.cart.v1`, `pizzadonia.admin.v1`.
+- D1 bermula kosong — tiada tempahan contoh. Tempahan sebenar pelanggan sahaja yang direkodkan.
+- Butang **padam semua** mengosongkan table D1 (memerlukan sesi penjual yang sah).
+- Cache localStorage: `pizzadonia.orders.v1`, `pizzadonia.cart.v1`; token sesi penjual: `pizzadonia.seller.token` (sessionStorage).
 
 ## Struktur
 

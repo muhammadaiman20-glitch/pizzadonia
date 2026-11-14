@@ -13,7 +13,6 @@ import {
   MapPin,
   MessageCircle,
   Navigation,
-  RotateCcw,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -25,7 +24,13 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { DEMO_MODE, SHOP, STATUS_META, type OrderStatus } from '../config'
+import { SHOP, STATUS_META, type OrderStatus } from '../config'
+import {
+  clearAdminToken,
+  getAdminToken,
+  loginAdmin,
+  onAuthExpired,
+} from '../lib/api'
 import { formatDateTime, isToday, rm, timeAgo } from '../lib/format'
 import { locationDirectionsUrl } from '../lib/location'
 import { statusWhatsAppLink, waPhone } from '../lib/notify'
@@ -34,8 +39,6 @@ import type { Order, PaymentStatus } from '../types'
 import { Logo } from '../components/Logo'
 import { PaymentBadge } from '../components/PaymentBadge'
 import { StatusBadge } from '../components/StatusBadge'
-
-const ADMIN_KEY = 'pizzadonia.admin.v1'
 
 interface DashboardProps {
   orders: Order[]
@@ -49,7 +52,6 @@ interface DashboardProps {
   advanceStatus: (id: string) => void
   setPaymentStatus: (id: string, paymentStatus: PaymentStatus) => void
   deleteOrder: (id: string) => void
-  resetDemo: () => void
   clearAll: () => void
   notify: (message: string) => void
 }
@@ -61,35 +63,31 @@ const FILTERS: Filter[] = ['semua', 'baru', 'diterima', 'dibakar', 'siap', 'sele
 function PinGate({ onSuccess }: { onSuccess: () => void }) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
-  const pinLength = SHOP.adminPin.length
+  const [checking, setChecking] = useState(false)
 
-  const unlock = () => {
-    sessionStorage.setItem(ADMIN_KEY, '1')
-    onSuccess()
-  }
-
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (pin === SHOP.adminPin) {
-      unlock()
-      return
-    }
-    setError('PIN tidak betul. Cuba lagi.')
-    setPin('')
-  }
+    if (checking) return
 
-  // Auto login sebaik sahaja PIN yang betul ditaip — tanpa perlu tekan butang.
-  const handlePinChange = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, pinLength)
-    setPin(digits)
-    setError('')
-    if (digits.length < pinLength) return
-    if (digits === SHOP.adminPin) {
-      unlock()
+    const value = pin.trim()
+    if (!value) {
+      setError('Masukkan PIN akaun penjual.')
       return
     }
-    setError('PIN tidak betul. Cuba lagi.')
-    setPin('')
+
+    setChecking(true)
+    setError('')
+    try {
+      // PIN disemak oleh Worker. Token sesi yang dipulangkan digunakan
+      // untuk panggilan dashboard seterusnya.
+      await loginAdmin(value)
+      onSuccess()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'PIN tidak betul. Cuba lagi.')
+      setPin('')
+    } finally {
+      setChecking(false)
+    }
   }
 
   return (
@@ -111,36 +109,38 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             Dashboard penjual
           </h1>
           <p className="mt-1.5 text-center text-xs leading-relaxed text-muted">
-            Masukkan PIN. Anda akan terus masuk sebaik sahaja PIN betul.
+            Masukkan PIN akaun penjual. Hanya akaun sebenar dibenarkan masuk.
           </p>
 
           <label htmlFor="pin" className="label mt-6">
-            PIN akses
+            PIN akaun penjual
           </label>
           <input
             id="pin"
             type="password"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete="current-password"
             value={pin}
-            onChange={(event) => handlePinChange(event.target.value)}
+            onChange={(event) => {
+              setPin(event.target.value.replace(/\D/g, '').slice(0, 32))
+              setError('')
+            }}
             className="field text-center text-lg tracking-[0.5em]"
             placeholder="••••"
-            maxLength={pinLength}
+            maxLength={32}
+            disabled={checking}
             autoFocus
           />
           {error && <p className="error-text text-center">{error}</p>}
 
-          <button type="submit" className="btn btn-red mt-4 h-11 w-full text-sm">
-            Masuk Dashboard
+          <button
+            type="submit"
+            className="btn btn-red mt-4 h-11 w-full text-sm"
+            disabled={checking}
+          >
+            {checking ? 'Menyemak…' : 'Masuk Dashboard'}
             <ArrowRight className="h-4 w-4" />
           </button>
-
-          {DEMO_MODE && (
-            <p className="mt-4 rounded-xl border border-cheese/50 bg-cheese/15 px-3 py-2 text-center text-[11px] font-semibold text-[#7a4f00]">
-              Mod ujian — PIN demo: <span className="font-mono font-bold">{SHOP.adminPin}</span>
-            </p>
-          )}
         </form>
       </div>
     </div>
@@ -439,13 +439,23 @@ export function Dashboard({
   advanceStatus,
   setPaymentStatus,
   deleteOrder,
-  resetDemo,
   clearAll,
   notify,
 }: DashboardProps) {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem(ADMIN_KEY) === '1')
+  const [authed, setAuthed] = useState(() => Boolean(getAdminToken()))
   const [filter, setFilter] = useState<Filter>('semua')
   const [search, setSearch] = useState('')
+
+  // Jika pelayan menolak token (tamat tempoh / PIN ditukar), kembali ke
+  // skrin log masuk serta-merta.
+  useEffect(
+    () =>
+      onAuthExpired(() => {
+        setAuthed(false)
+        notify('Sesi tamat. Sila log masuk semula.')
+      }),
+    [notify],
+  )
 
   // Gabungkan senarai D1 dengan cache peranti: tempahan yang baru dicipta
   // pada peranti ini terus kelihatan walaupun senarai D1 belum selesai
@@ -457,7 +467,7 @@ export function Dashboard({
     return [...merged.values()]
   }, [orders, fallbackOrders])
 
-  // Muatkan senarai penuh dari D1 selepas PIN disahkan, dan semak semula
+  // Muatkan senarai penuh dari D1 selepas sesi disahkan, dan semak semula
   // secara berkala supaya tempahan baru muncul tanpa refresh manual.
   useEffect(() => {
     if (!authed) return
@@ -516,7 +526,7 @@ export function Dashboard({
   }).format(new Date())
 
   const logout = () => {
-    sessionStorage.removeItem(ADMIN_KEY)
+    clearAdminToken()
     setAuthed(false)
     notify('Anda telah log keluar')
   }
@@ -576,23 +586,11 @@ export function Dashboard({
             <p className="mt-1.5 text-xs font-medium capitalize text-muted">{dateLabel}</p>
           </div>
           <div className="flex items-center gap-2">
-            {(DEMO_MODE || source === 'server') && (
+            {source === 'server' && (
               <span className="rounded-full border border-cheese/60 bg-cheese/15 px-3 py-1.5 text-[10px] font-bold text-[#7a4f00]">
-                {source === 'server' ? 'Data awan · D1' : 'Mod ujian · data peranti ini'}
+                Data awan · D1
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                resetDemo()
-                notify('Data demo dimuat semula')
-              }}
-              className="grid h-9 w-9 place-items-center rounded-full border border-line bg-paper text-muted transition hover:text-ink"
-              aria-label="Muat semula data demo"
-              title="Muat semula data demo"
-            >
-              <RotateCcw className="h-4 w-4" />
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -753,7 +751,7 @@ export function Dashboard({
               : 'API tidak tersedia — perubahan disimpan pada peranti ini (localStorage).'}
           </p>
           <p>
-            WhatsApp kedai: +{SHOP.whatsapp} · PIN: {SHOP.adminPin}
+            WhatsApp kedai: +{SHOP.whatsapp}
           </p>
         </div>
       </div>

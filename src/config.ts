@@ -1,14 +1,15 @@
 /**
  * Pizzadonia — tetapan utama kedai.
- * Tukar `whatsapp` dan `adminPin` di sini sebelum guna untuk bisnes sebenar.
+ * Tukar `whatsapp` di sini sebelum guna untuk bisnes sebenar.
+ *
+ * PIN penjual sengaja tiada di sini: ia disimpan sebagai secret pelayan
+ * (`wrangler secret put ADMIN_PIN`) dan disemak oleh Worker.
  */
 export const SHOP = {
   name: 'Pizzadonia',
   tagline: 'Pizza bakar segar. Hangat sampai pintu.',
   /** Nombor WhatsApp format antarabangsa tanpa "+" atau sengkang. */
   whatsapp: '601162260552',
-  /** PIN mudah untuk dashboard tempahan (mod ujian). */
-  adminPin: '0000',
   hours: 'Setiap hari · 11:00 pagi – 11:00 malam',
   area: 'Penghantaran dalam 15 km',
   delivery: {
@@ -23,8 +24,6 @@ export const SHOP = {
     merchant: 'Muhammad Aiman bin Yahya',
   },
 } as const
-
-export const DEMO_MODE = true
 
 export const STATUS_FLOW = ['baru', 'diterima', 'dibakar', 'siap', 'selesai'] as const
 

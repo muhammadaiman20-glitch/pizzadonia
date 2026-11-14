@@ -74,7 +74,7 @@ export function Footer({ onMenu, onHow }: FooterProps) {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-cream/10 pt-6 text-xs text-cream/60 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} Pizzadonia. Semua hak terpelihara.</p>
-          <p>Mod ujian — tempahan disimpan pada peranti ini sahaja.</p>
+          <p>Tempahan dihantar terus ke WhatsApp kedai.</p>
         </div>
       </div>
     </footer>

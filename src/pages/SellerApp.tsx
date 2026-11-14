@@ -26,7 +26,6 @@ export function SellerApp() {
     advanceStatus,
     setPaymentStatus,
     deleteOrder,
-    resetDemo,
     clearAll,
   } = useOrders()
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -54,7 +53,6 @@ export function SellerApp() {
         advanceStatus={advanceStatus}
         setPaymentStatus={setPaymentStatus}
         deleteOrder={deleteOrder}
-        resetDemo={resetDemo}
         clearAll={clearAll}
         notify={notify}
       />

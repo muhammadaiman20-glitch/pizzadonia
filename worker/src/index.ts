@@ -7,11 +7,12 @@
  *  - `GET  /api/orders/:id`          baca satu tempahan
  *  - `POST /api/orders/:id/payment`  pelanggan sahkan "sudah bayar" (pending)
  *
- * Laluan admin (header `x-admin-pin` = secret `ADMIN_PIN`):
+ * Laluan admin (token sesi `Authorization: Bearer <token>`):
+ *  - `POST   /api/auth/login`        tukar PIN kepada token sesi
  *  - `GET    /api/orders`            senarai semua tempahan
  *  - `PATCH  /api/orders/:id`        tukar status / status bayaran
  *  - `DELETE /api/orders/:id`        padam tempahan
- *  - `POST   /api/orders/reset`      ganti semua tempahan (demo / padam semua)
+ *  - `POST   /api/orders/reset`      ganti semua tempahan (padam semua)
  *
  * Jika binding `ASSETS` disediakan, Worker turut menghidangkan `dist/` pada
  * origin yang sama supaya frontend boleh panggil `/api` tanpa CORS.
@@ -21,8 +22,10 @@ import type { D1Database, ExportedHandler, Fetcher } from '@cloudflare/workers-t
 interface Env {
   DB: D1Database
   ASSETS?: Fetcher
-  /** Secret (`wrangler secret put ADMIN_PIN`). Lalai `0000` untuk demo. */
+  /** Secret akaun penjual (`wrangler secret put ADMIN_PIN`). Wajib ditetapkan. */
   ADMIN_PIN?: string
+  /** Pilihan: kunci tandatangan token. Jika tiada, `ADMIN_PIN` digunakan. */
+  AUTH_SECRET?: string
 }
 
 interface OrderRecord {
@@ -36,13 +39,22 @@ interface OrderRecord {
   [key: string]: unknown
 }
 
-const DEFAULT_PIN = '0000'
+const TOKEN_TTL_MS = 12 * 60 * 60 * 1000
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_MAX_ATTEMPTS = 8
+const MAX_PIN_LENGTH = 128
 const ORDER_STATUSES = new Set(['baru', 'diterima', 'dibakar', 'siap', 'selesai', 'batal'])
 const PAYMENT_STATUSES = new Set(['unpaid', 'pending', 'paid'])
 const ID_PATTERN = /^PZ-[0-9A-Za-z-]{4,40}$/
 const MAX_BODY_BYTES = 64 * 1024
 const MAX_BULK_ORDERS = 200
 const MAX_LOOKUP_RESULTS = 20
+
+/**
+ * Had cubaan log masuk ringkas (per isolate). Bukan pengganti rate limiting
+ * global, tetapi menghalang brute force asas pada satu instance.
+ */
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
 
 /** Origin yang dibenarkan memanggil API dari domain lain (Vite dev / Pages / Capacitor). */
 const ALLOWED_ORIGINS = new Set([
@@ -71,7 +83,7 @@ function corsHeaders(request: Request): Record<string, string> {
   if (!origin || !isAllowedOrigin(origin)) return {}
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'content-type, x-admin-pin',
+    'Access-Control-Allow-Headers': 'content-type, authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
@@ -93,16 +105,150 @@ function fail(request: Request, status: number, message: string): Response {
   return json(request, { error: message }, status)
 }
 
-/** Perbandingan PIN masa-tetap supaya tidak boleh diteka melalui timing. */
-function pinMatches(request: Request, env: Env): boolean {
-  const supplied = request.headers.get('x-admin-pin') ?? ''
-  const expected = env.ADMIN_PIN ?? DEFAULT_PIN
-  if (supplied.length !== expected.length) return false
+/** Perbandingan rentetan masa-tetap supaya PIN tidak boleh diteka melalui timing. */
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
   let diff = 0
-  for (let i = 0; i < supplied.length; i += 1) {
-    diff |= supplied.charCodeAt(i) ^ expected.charCodeAt(i)
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
   }
   return diff === 0
+}
+
+function clientAddress(request: Request): string {
+  return request.headers.get('cf-connecting-ip') ?? 'unknown'
+}
+
+function loginBlocked(request: Request): boolean {
+  const key = clientAddress(request)
+  const entry = loginAttempts.get(key)
+  if (!entry) return false
+  if (entry.resetAt <= Date.now()) {
+    loginAttempts.delete(key)
+    return false
+  }
+  return entry.count >= LOGIN_MAX_ATTEMPTS
+}
+
+function recordLoginFailure(request: Request): void {
+  const key = clientAddress(request)
+  const now = Date.now()
+  const entry = loginAttempts.get(key)
+  if (!entry || entry.resetAt <= now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+  } else {
+    entry.count += 1
+  }
+  if (loginAttempts.size > 500) {
+    for (const [key, value] of loginAttempts) {
+      if (value.resetAt <= now) loginAttempts.delete(key)
+    }
+  }
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function base64UrlDecode(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function tokenSecret(env: Env): string | null {
+  // `AUTH_SECRET` mengelakkan token menjadi tidak sah jika PIN ditukar.
+  // Jika tidak ditetapkan, PIN itu sendiri menjadi kunci tandatangan.
+  return env.AUTH_SECRET ?? env.ADMIN_PIN ?? null
+}
+
+async function hmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+}
+
+async function signToken(secret: string): Promise<string> {
+  const payload = { sub: 'seller', exp: Date.now() + TOKEN_TTL_MS }
+  const body = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)))
+  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), new TextEncoder().encode(body))
+  return `${body}.${base64UrlEncode(new Uint8Array(signature))}`
+}
+
+async function adminAuthorized(request: Request, env: Env): Promise<boolean> {
+  const secret = tokenSecret(env)
+  if (!secret) return false
+
+  const header = request.headers.get('authorization') ?? ''
+  const match = header.match(/^Bearer\s+(.+)$/i)
+  if (!match) return false
+
+  const [body, signature] = match[1].split('.')
+  if (!body || !signature) return false
+
+  try {
+    const expected = new Uint8Array(
+      await crypto.subtle.sign('HMAC', await hmacKey(secret), new TextEncoder().encode(body)),
+    )
+    const provided = base64UrlDecode(signature)
+    if (provided.length !== expected.length) return false
+
+    let diff = 0
+    for (let i = 0; i < expected.length; i += 1) diff |= provided[i] ^ expected[i]
+    if (diff !== 0) return false
+
+    const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(body))) as {
+      sub?: string
+      exp?: number
+    }
+    return payload.sub === 'seller' && typeof payload.exp === 'number' && payload.exp > Date.now()
+  } catch {
+    return false
+  }
+}
+
+/** Log masuk akaun penjual sebenar. PIN disemak di pelayan, bukan di browser. */
+async function login(request: Request, env: Env): Promise<Response> {
+  if (!env.ADMIN_PIN) {
+    return fail(request, 503, 'Akaun penjual belum dikonfigurasi pada pelayan.')
+  }
+  if (loginBlocked(request)) {
+    return fail(request, 429, 'Terlalu banyak cubaan log masuk. Cuba lagi selepas 15 minit.')
+  }
+
+  const body = await readJson(request)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return fail(request, 400, 'Data tidak sah.')
+  }
+
+  const pin = (body as { pin?: unknown }).pin
+  if (typeof pin !== 'string' || pin.length === 0 || pin.length > MAX_PIN_LENGTH) {
+    recordLoginFailure(request)
+    return fail(request, 401, 'PIN tidak sah.')
+  }
+
+  if (!constantTimeEqual(pin, env.ADMIN_PIN)) {
+    recordLoginFailure(request)
+    return fail(request, 401, 'PIN tidak sah.')
+  }
+
+  loginAttempts.delete(clientAddress(request))
+  const secret = tokenSecret(env)
+  if (!secret) return fail(request, 503, 'Akaun penjual belum dikonfigurasi pada pelayan.')
+
+  return json(request, {
+    token: await signToken(secret),
+    expiresIn: TOKEN_TTL_MS / 1000,
+  })
 }
 
 function roundMoney(value: number): number {
@@ -399,7 +545,7 @@ async function deleteOrder(request: Request, env: Env, id: string): Promise<Resp
   return json(request, { deleted: id })
 }
 
-/** Ganti semua tempahan — digunakan oleh butang "muat semula demo" / "padam semua". */
+/** Ganti semua tempahan — digunakan oleh butang "padam semua". */
 async function replaceOrders(request: Request, env: Env): Promise<Response> {
   const body = await readJson(request)
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -449,6 +595,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json(request, { ok: true, service: 'pizzadonia' })
   }
 
+  // ---- Log masuk akaun penjual (awam, PIN disemak di pelayan) ----
+  if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+    return login(request, env)
+  }
+
   // ---- Laluan awam ----
   if (url.pathname === '/api/orders' && request.method === 'POST') {
     return createOrder(request, env)
@@ -472,9 +623,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return getOrder(request, env, id)
   }
 
-  // ---- Laluan admin (PIN) ----
-  if (!pinMatches(request, env)) {
-    return fail(request, 401, 'PIN tidak sah.')
+  // ---- Laluan admin (token sesi) ----
+  if (!(await adminAuthorized(request, env))) {
+    return fail(request, 401, 'Sesi tamat. Sila log masuk semula.')
   }
 
   if (url.pathname === '/api/orders' && request.method === 'GET') {

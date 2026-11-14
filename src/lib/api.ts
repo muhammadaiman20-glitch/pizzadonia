@@ -9,12 +9,45 @@
  *
  * Tetapkan `VITE_API_BASE=off` untuk paksa mod localStorage walaupun dalam build.
  *
- * Nota keselamatan: PIN admin hanya dihantar pada panggilan admin. Laluan awam
- * (cipta/baca satu tempahan/cari/sahkan bayaran) tidak menghantar PIN.
+ * Keselamatan: PIN penjual hanya dihantar sekali ke `/auth/login`. Selepas itu
+ * semua panggilan admin menggunakan token sesi (Bearer) yang ditandatangan
+ * pelayan. PIN tidak disimpan dalam bundle.
  */
 import type { OrderStatus } from '../config'
-import { SHOP } from '../config'
 import type { Order, PaymentStatus } from '../types'
+
+const TOKEN_KEY = 'pizzadonia.seller.token'
+const AUTH_EXPIRED_EVENT = 'pizzadonia:auth-expired'
+
+function readToken(): string | null {
+  try {
+    return window.sessionStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function getAdminToken(): string | null {
+  return readToken()
+}
+
+export function clearAdminToken(): void {
+  try {
+    window.sessionStorage.removeItem(TOKEN_KEY)
+  } catch {
+    /* storan tidak tersedia */
+  }
+}
+
+function storeToken(token: string): void {
+  window.sessionStorage.setItem(TOKEN_KEY, token)
+}
+
+/** Dipanggil apabila pelayan menolak token (sesi tamat / PIN ditukar). */
+export function onAuthExpired(handler: () => void): () => void {
+  window.addEventListener(AUTH_EXPIRED_EVENT, handler)
+  return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handler)
+}
 
 const configuredBase = import.meta.env.VITE_API_BASE as string | undefined
 const API_BASE = (configuredBase ?? '/api').replace(/\/$/, '')
@@ -43,11 +76,16 @@ async function request<T>(
   init: RequestInit = {},
   options: { admin?: boolean } = {},
 ): Promise<T> {
+  const token = options.admin ? readToken() : null
+  if (options.admin && !token) {
+    throw new ApiError(401, 'Sesi tamat. Sila log masuk semula.')
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      ...(options.admin ? { 'x-admin-pin': SHOP.adminPin } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
     signal: init.signal ?? AbortSignal.timeout(12000),
@@ -60,6 +98,10 @@ async function request<T>(
       if (body.error) message = body.error
     } catch {
       /* respons bukan JSON — guna mesej lalai */
+    }
+    if (options.admin && response.status === 401) {
+      clearAdminToken()
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
     }
     throw new ApiError(response.status, message)
   }
@@ -106,7 +148,18 @@ export async function confirmPayment(id: string): Promise<Order> {
   return data.order
 }
 
-// ---- Laluan admin (PIN) ----
+// ---- Log masuk akaun penjual ----
+
+/** Tukar PIN akaun penjual kepada token sesi. PIN disemak di pelayan. */
+export async function loginAdmin(pin: string): Promise<void> {
+  const data = await request<{ token: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  })
+  storeToken(data.token)
+}
+
+// ---- Laluan admin (token sesi) ----
 
 export async function listOrders(): Promise<Order[]> {
   const data = await request<{ orders: Order[] }>('/orders', {}, { admin: true })
@@ -133,7 +186,7 @@ export async function removeOrder(id: string): Promise<void> {
   )
 }
 
-/** Ganti semua tempahan di server (demo / padam semua). */
+/** Ganti semua tempahan di server (padam semua). */
 export async function replaceOrders(orders: Order[]): Promise<void> {
   await request<{ orders: Order[] }>(
     '/orders/reset',

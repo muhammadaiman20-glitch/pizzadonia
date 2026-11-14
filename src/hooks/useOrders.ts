@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { OrderStatus } from '../config'
-import { SHOP, STATUS_META } from '../config'
-import { getPizza } from '../data/menu'
+import { STATUS_META } from '../config'
 import {
-  ApiError,
   apiEnabled,
   confirmPayment as confirmPaymentApi,
   createOrder,
@@ -15,134 +13,9 @@ import {
   updateOrder,
 } from '../lib/api'
 import { newOrderId } from '../lib/format'
-import { mapsUrl } from '../lib/location'
-import type { NewOrder, Order, OrderItem, OrderLocation, Payment, PaymentStatus } from '../types'
+import type { NewOrder, Order, PaymentStatus } from '../types'
 
 const ORDERS_KEY = 'pizzadonia.orders.v1'
-const SEED_KEY = 'pizzadonia.orders.seeded.v1'
-
-const demoLine = (itemId: string, sizeId: string, qty: number): OrderItem => {
-  const pizza = getPizza(itemId)
-  const size = pizza?.sizes.find((option) => option.id === sizeId)
-  if (!pizza || !size) throw new Error(`Menu demo tidak sah: ${itemId}/${sizeId}`)
-  return {
-    itemId,
-    name: pizza.name,
-    sizeId,
-    sizeLabel: size.label,
-    price: size.price,
-    qty,
-  }
-}
-
-const buildDemoOrder = (
-  minutesAgo: number,
-  name: string,
-  phone: string,
-  fulfilment: 'delivery' | 'pickup',
-  payment: Payment,
-  status: OrderStatus,
-  items: OrderItem[],
-  address = '',
-  notes = '',
-  location: OrderLocation | null = null,
-): Order => {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0)
-  const deliveryFee = fulfilment === 'delivery' && subtotal < SHOP.delivery.freeAbove ? SHOP.delivery.fee : 0
-  const createdAt = new Date(Date.now() - minutesAgo * 60_000).toISOString()
-  const paymentStatus: PaymentStatus =
-    status === 'selesai' ? 'paid' : payment === 'qr' ? 'pending' : 'unpaid'
-  return {
-    id: newOrderId(),
-    createdAt,
-    updatedAt: createdAt,
-    name,
-    phone,
-    fulfilment,
-    address,
-    location,
-    payment,
-    paymentStatus,
-    notes,
-    items,
-    subtotal,
-    deliveryFee,
-    total: subtotal + deliveryFee,
-    status,
-  }
-}
-
-const demoLocation = (lat: number, lng: number): OrderLocation => ({
-  lat,
-  lng,
-  url: mapsUrl(lat, lng),
-  source: 'gps',
-})
-
-const makeDemoOrders = (): Order[] => [
-  buildDemoOrder(
-    8,
-    'Nurul Aisyah',
-    '0123456789',
-    'delivery',
-    'qr',
-    'baru',
-    [demoLine('ayam', '10inci', 1), demoLine('mix', '8inci', 2)],
-    'No. 12, Jalan Melati 3, Taman Sri Indah',
-    'Tolong potong 8 bahagian.',
-    demoLocation(3.0738, 101.5183),
-  ),
-  buildDemoOrder(
-    34,
-    'Faizal Hakim',
-    '0138889900',
-    'pickup',
-    'cod',
-    'diterima',
-    [demoLine('daging', '8inci', 1), demoLine('tuna', '8inci', 1)],
-  ),
-  buildDemoOrder(
-    57,
-    'Siti Mariam',
-    '0172223344',
-    'delivery',
-    'cod',
-    'dibakar',
-    [demoLine('udang', '8inci', 1), demoLine('hawaii-beef', '8inci', 1)],
-    'Blok B-08-12, Pangsapuri Seri Murni',
-  ),
-  buildDemoOrder(
-    95,
-    'Amirul Nizam',
-    '0197771122',
-    'delivery',
-    'transfer',
-    'siap',
-    [demoLine('meatball', '10inci', 1), demoLine('ayam', '8inci', 1)],
-    'No. 5, Jalan Kenari 2, Taman Kenari',
-    'Rumah pagar hitam.',
-    demoLocation(3.139, 101.6869),
-  ),
-  buildDemoOrder(
-    210,
-    'Chen Wei',
-    '0165558899',
-    'pickup',
-    'cod',
-    'selesai',
-    [demoLine('wagyu', '10inci', 1)],
-  ),
-  buildDemoOrder(
-    26 * 60,
-    'Hafiz Roslan',
-    '0112345678',
-    'delivery',
-    'cod',
-    'selesai',
-    [demoLine('hawaii-chicken', '10inci', 1), demoLine('isi-ketam', '8inci', 1)],
-    'No. 21, Jalan Bunga Raya, Taman Bunga Raya',
-  ),
-]
 
 function parseOrders(raw: string | null): Order[] {
   if (!raw) return []
@@ -160,10 +33,7 @@ function parseOrders(raw: string | null): Order[] {
 }
 
 function loadOrders(): Order[] {
-  const stored = localStorage.getItem(ORDERS_KEY)
-  if (stored !== null) return parseOrders(stored)
-  if (localStorage.getItem(SEED_KEY) === '1') return []
-  return makeDemoOrders()
+  return parseOrders(localStorage.getItem(ORDERS_KEY))
 }
 
 function filterLocalOrders(query: string, orders: Order[]): Order[] {
@@ -186,7 +56,7 @@ export type AdminState = 'idle' | 'loading' | 'ready' | 'error'
  *
  * Laluan awam hanya memanggil endpoint awam (cipta / baca satu / cari /
  * sahkan bayaran). Senarai penuh hanya dimuatkan selepas dashboard dibuka
- * dan PIN dihantar pada panggilan admin sahaja.
+ * dan token sesi penjual dihantar pada panggilan admin sahaja.
  */
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>(loadOrders)
@@ -220,9 +90,7 @@ export function useOrders() {
     setSource(next)
   }, [])
 
-  /** Ralat 404 bermaksud tempahan hanya wujud pada cache peranti (demo). */
   const reportSaveError = useCallback((error: unknown, message: string) => {
-    if (error instanceof ApiError && error.status === 404) return
     console.warn('[pizzadonia]', message, error)
     setAdminError(message)
   }, [])
@@ -230,7 +98,6 @@ export function useOrders() {
   // Kekalkan cache peranti untuk fallback/offline.
   useEffect(() => {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders))
-    localStorage.setItem(SEED_KEY, '1')
   }, [orders])
 
   useEffect(() => {
@@ -244,7 +111,7 @@ export function useOrders() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  /** Muatkan senarai penuh untuk dashboard (PIN diperlukan oleh API). */
+  /** Muatkan senarai penuh untuk dashboard (token sesi diperlukan oleh API). */
   const loadAdminOrders = useCallback(async () => {
     if (!apiEnabled) {
       markSource('local')
@@ -437,20 +304,6 @@ export function useOrders() {
     [commitAdmin, commitLocal, reportSaveError],
   )
 
-  const resetDemo = useCallback(() => {
-    const demo = makeDemoOrders()
-    commitLocal(() => demo)
-    commitAdmin(() => demo)
-    if (apiEnabled && sourceRef.current === 'server') {
-      void replaceOrders(demo)
-        .then(() => markSource('server'))
-        .catch((error: unknown) => {
-          console.warn('[pizzadonia] gagal muat demo ke server:', error)
-          setAdminError('Gagal muat data demo ke server.')
-        })
-    }
-  }, [commitAdmin, commitLocal, markSource])
-
   const clearAll = useCallback(() => {
     commitLocal(() => [])
     commitAdmin(() => [])
@@ -479,7 +332,6 @@ export function useOrders() {
     advanceStatus,
     setPaymentStatus,
     deleteOrder,
-    resetDemo,
     clearAll,
   }
 }
