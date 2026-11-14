@@ -26,6 +26,7 @@ import { SHOP } from '../config'
 import { getPizza } from '../data/menu'
 import { buildWhatsAppMessage, cartDetails, deliveryFeeFor } from '../lib/cart'
 import { rm } from '../lib/format'
+import { getCurrentCoordinates, locationErrorMessage } from '../lib/geolocation'
 import { mapsUrl, parseLocationInput } from '../lib/location'
 import { openWhatsApp } from '../lib/whatsapp'
 import type { NewOrder, Order, OrderLocation, Payment, Fulfilment } from '../types'
@@ -66,35 +67,18 @@ export function CheckoutView({
   const [mapError, setMapError] = useState('')
   const [errors, setErrors] = useState<Errors>({})
 
-  const shareLocation = () => {
+  const shareLocation = async () => {
     setLocationError('')
-    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      setLocationError('Peranti ini tidak menyokong lokasi automatik. Tampal pautan Google Maps.')
-      return
-    }
-    if (!window.isSecureContext) {
-      setLocationError(
-        'Lokasi automatik memerlukan sambungan selamat (https) atau localhost. Tampal pautan Google Maps sebagai ganti.',
-      )
-      return
-    }
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = Number(position.coords.latitude.toFixed(6))
-        const lng = Number(position.coords.longitude.toFixed(6))
-        setLocation({ lat, lng, url: mapsUrl(lat, lng), source: 'gps' })
-        setLocating(false)
-        notify('Lokasi berjaya ditanda')
-      },
-      () => {
-        setLocating(false)
-        setLocationError(
-          'Gagal dapatkan lokasi. Benarkan akses lokasi pada browser, atau tampal pautan Google Maps.',
-        )
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
-    )
+    try {
+      const { lat, lng } = await getCurrentCoordinates()
+      setLocation({ lat, lng, url: mapsUrl(lat, lng), source: 'gps' })
+      notify('Lokasi berjaya ditanda')
+    } catch (error) {
+      setLocationError(locationErrorMessage(error))
+    } finally {
+      setLocating(false)
+    }
   }
 
   const applyMapLink = () => {
@@ -391,7 +375,7 @@ export function CheckoutView({
                     <div className="mt-3 space-y-2.5">
                       <button
                         type="button"
-                        onClick={shareLocation}
+                        onClick={() => void shareLocation()}
                         disabled={locating}
                         className="btn btn-ghost h-10 w-full text-[11px]"
                       >

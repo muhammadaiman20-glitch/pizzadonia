@@ -161,7 +161,7 @@ Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
-Tag seperti `v1.2.0` akan membina APK dan melampirkannya pada **GitHub Release**.
+Tag seperti `v1.2.1` akan membina APK dan melampirkannya pada **GitHub Release**.
 
 ### Kunci tandatangan
 
@@ -196,8 +196,8 @@ Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
 
 ```json
 {
-  "customer": { "versionName": "1.2.0", "url": "/download/Pizzadonia-Pelanggan.apk" },
-  "seller": { "versionName": "1.2.0", "url": "/download/Pizzadonia-Penjual.apk" }
+  "customer": { "versionName": "1.2.1", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.2.1", "url": "/download/Pizzadonia-Penjual.apk" }
 }
 ```
 
@@ -226,13 +226,13 @@ VERSION=$(node -p "require('./package.json').version")
 gh release create "v$VERSION" release/Pizzadonia-Pelanggan.apk release/Pizzadonia-Penjual.apk
 ```
 
-> **Kemas kini kali pertama:** APK 1.1.0 dan lebih awal hanya mempunyai butang muat turun manual. Selepas memasang APK 1.2.0 sekali, kemas kini seterusnya berjalan secara automatik (muat turun + pemasang terbuka).
+> **Kemas kini kali pertama:** APK 1.1.0 dan lebih awal hanya mempunyai butang muat turun manual. Selepas memasang APK 1.2.0 atau lebih baharu sekali, kemas kini seterusnya berjalan secara automatik (muat turun + pemasang terbuka).
 
 Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
 
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.0
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.0/Pizzadonia-Pelanggan.apk
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.0/Pizzadonia-Penjual.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.1
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.1/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.1/Pizzadonia-Penjual.apk
 
 Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
@@ -322,8 +322,10 @@ Aliran kekal: bayar dalam app bank → tekan **Saya sudah bayar** → hantar ke 
 
 Semasa checkout penghantaran, pelanggan boleh:
 
-1. Tekan **Kongsi lokasi semasa** — browser minta kebenaran dan menyimpan koordinat GPS, atau
+1. Tekan **Kongsi lokasi semasa** — app/browser minta kebenaran dan menyimpan koordinat GPS, atau
 2. Tampal pautan **Google Maps** (contoh: `https://maps.app.goo.gl/...` atau pautan dengan koordinat).
+
+Dalam app Android, butang ini menggunakan plugin native `@capacitor/geolocation` dan permission `ACCESS_COARSE_LOCATION` / `ACCESS_FINE_LOCATION`. Ini perlu kerana WebView tidak boleh meminta kebenaran lokasi Android sendiri; `navigator.geolocation` pelayar digunakan sebagai fallback pada web. Jika kebenaran disekat, app memaparkan mesej yang mengarahkan pengguna membenarkan lokasi dalam tetapan atau menampal pautan Google Maps.
 
 Lokasi disimpan bersama tempahan dan dipaparkan sebagai:
 
