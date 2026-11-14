@@ -53,8 +53,8 @@ export function CartDrawer({
         onClick={onClose}
         className="absolute inset-0 h-full w-full cursor-default bg-ink/55 backdrop-blur-sm animate-fade-in"
       />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-cream shadow-2xl animate-slide-in">
-        <header className="flex items-center justify-between border-b border-line bg-paper px-5 py-4">
+      <aside className="absolute inset-y-0 right-0 flex h-full w-full max-w-md flex-col overflow-hidden bg-cream shadow-2xl animate-slide-in">
+        <header className="flex shrink-0 items-center justify-between border-b border-line bg-paper px-5 py-3.5 sm:py-4">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-tomato/10 text-tomato">
               <ShoppingBag className="h-5 w-5" />
@@ -75,7 +75,7 @@ export function CartDrawer({
         </header>
 
         {items.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-8 py-8 text-center">
             <span className="grid h-20 w-20 place-items-center rounded-full bg-cheese/25 text-crust">
               <Pizza className="h-10 w-10" />
             </span>
@@ -94,7 +94,7 @@ export function CartDrawer({
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-5 py-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-4">
               <ul className="space-y-3">
                 {items.map((item) => {
                   const line = lines.find((entry) => entry.key === `${item.itemId}:${item.sizeId}`)
@@ -176,19 +176,19 @@ export function CartDrawer({
               )}
             </div>
 
-            <footer className="border-t border-line bg-paper px-5 py-5">
-              <div className="flex items-center justify-between text-sm">
+            <footer className="shrink-0 border-t border-line bg-paper px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_24px_-16px_rgb(42_26_18_/_0.35)]">
+              <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium text-muted">Subtotal</span>
-                <span className="font-display text-2xl tracking-wide text-ink">{rm(subtotal)}</span>
+                <span className="font-display text-2xl leading-none tracking-wide text-ink">{rm(subtotal)}</span>
               </div>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
                 Penghantaran dari {rm(SHOP.delivery.fee)} · percuma untuk tempahan{' '}
                 {rm(SHOP.delivery.freeAbove)}+
               </p>
               <button
                 type="button"
                 onClick={onCheckout}
-                className="btn btn-red mt-4 h-12 w-full text-sm"
+                className="btn btn-red mt-3 h-12 w-full text-sm"
               >
                 Teruskan Tempahan
                 <ArrowRight className="h-4 w-4" />
@@ -196,7 +196,7 @@ export function CartDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-2 w-full py-1 text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline"
+                className="mt-1.5 w-full py-1 text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline"
               >
                 Terus lihat menu
               </button>
