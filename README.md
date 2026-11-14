@@ -185,7 +185,7 @@ Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
-Tag seperti `v1.2.2` akan membina APK dan melampirkannya pada **GitHub Release**.
+Tag seperti `v1.2.3` akan membina APK dan melampirkannya pada **GitHub Release**.
 
 ### Kunci tandatangan
 
@@ -220,8 +220,8 @@ Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
 
 ```json
 {
-  "customer": { "versionName": "1.2.2", "url": "/download/Pizzadonia-Pelanggan.apk" },
-  "seller": { "versionName": "1.2.2", "url": "/download/Pizzadonia-Penjual.apk" }
+  "customer": { "versionName": "1.2.3", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.2.3", "url": "/download/Pizzadonia-Penjual.apk" }
 }
 ```
 
@@ -236,6 +236,8 @@ Pengguna hanya perlu menekan **Install**. Android **tidak membenarkan** pemasang
 Plugin native: `android/app/src/main/java/com/pizzadonia/app/AppUpdaterPlugin.java` (didaftarkan dalam `MainActivity.java`, permission `REQUEST_INSTALL_PACKAGES`, fail dikongsi melalui `FileProvider`).
 
 `versionCode` APK sentiasa meningkat (cap masa Unix atau `VERSION_CODE`), jadi Android menerima APK baharu sebagai kemas kini. `versionName` diambil daripada `package.json` supaya manifest dan APK sentiasa sepadan.
+
+Sejak **1.2.3**, `MainActivity` mengosongkan cache WebView sekali selepas `versionCode` berubah. Ini memastikan UI lama (contoh butang demo yang telah dibuang) tidak terus dipaparkan selepas APK baharu dipasang. Respons HTML juga dihantar dengan `Cache-Control: no-cache` melalui `public/_headers`.
 
 Langkah mengeluarkan versi baharu:
 
@@ -255,9 +257,9 @@ gh release create "v$VERSION" release/Pizzadonia-Pelanggan.apk release/Pizzadoni
 
 Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
 
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.2
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.2/Pizzadonia-Pelanggan.apk
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.2/Pizzadonia-Penjual.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.3
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.3/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.3/Pizzadonia-Penjual.apk
 
 Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
