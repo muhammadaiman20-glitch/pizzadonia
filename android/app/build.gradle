@@ -1,7 +1,22 @@
 apply plugin: 'com.android.application'
 
-def appVersionCode = (project.findProperty('versionCode') ?: System.getenv('VERSION_CODE') ?: '1').toInteger()
-def appVersionName = project.findProperty('versionName') ?: System.getenv('VERSION_NAME') ?: '1.0'
+// Versi app diambil daripada package.json (satu sumber kebenaran). Nilai
+// boleh ditindih melalui -PversionName / VERSION_NAME semasa build.
+def packageJsonFile = rootProject.file('../package.json')
+def packageVersion = '1.0.0'
+if (packageJsonFile.exists()) {
+    try {
+        packageVersion = new groovy.json.JsonSlurper().parseText(packageJsonFile.text).version ?: packageVersion
+    } catch (Exception ignored) {
+        logger.warn("Tidak dapat membaca versi daripada package.json; guna ${packageVersion}")
+    }
+}
+
+// versionCode mesti sentiasa meningkat supaya Android menerima kemas kini.
+// Lalai: cap masa Unix (saat). GitHub Actions membekalkan VERSION_CODE.
+def defaultVersionCode = (System.currentTimeMillis() / 1000L).toInteger()
+def appVersionCode = (project.findProperty('versionCode') ?: System.getenv('VERSION_CODE') ?: defaultVersionCode).toInteger()
+def appVersionName = project.findProperty('versionName') ?: System.getenv('VERSION_NAME') ?: packageVersion
 
 // Kunci tandatangan sedia ada. Isi melalui pemboleh ubah persekitaran
 // (GitHub Secrets) atau -P pada command line. Jika tiada, build guna

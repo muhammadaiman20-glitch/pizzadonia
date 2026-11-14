@@ -1,7 +1,7 @@
 {
   "name": "finance",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.6.2",
     "lucide-react": "^1.72.0",
     "qrcode": "^1.5.4",

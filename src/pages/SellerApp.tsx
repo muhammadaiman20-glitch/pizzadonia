@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Dashboard } from './Dashboard'
 import { Toast } from '../components/Toast'
+import { UpdateBanner } from '../components/UpdateBanner'
 import { useOrders } from '../hooks/useOrders'
 
 interface ToastState {
@@ -58,6 +59,7 @@ export function SellerApp() {
         notify={notify}
       />
       <Toast key={toast?.id ?? 'empty'} message={toast?.text ?? null} />
+      <UpdateBanner />
     </>
   )
 }

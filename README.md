@@ -184,6 +184,42 @@ Nilai lalai untuk debug keystore Android Studio ialah alias `androiddebugkey`, k
 
 > App pelanggan dan penjual mempunyai ID berbeza, jadi ia boleh dipasang bersama. Untuk mengemas kini app yang sama pada masa hadapan, gunakan kunci tandatangan yang sama.
 
+### Kemas kini automatik (APK)
+
+App Android menyemak fail manifest di pelayan setiap kali dibuka atau kembali aktif:
+
+```
+GET /app-version.json
+```
+
+Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
+
+```json
+{
+  "customer": { "versionName": "1.1.0", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.1.0", "url": "/download/Pizzadonia-Penjual.apk" }
+}
+```
+
+Jika `versionName` dalam manifest lebih baharu daripada versi APK yang dipasang, app memaparkan pemberitahuan **Kemas kini tersedia**. Butang **Muat turun** membuka pelayar sistem untuk memuat turun APK; Android kemudian meminta pengesahan pemasangan. Pengguna boleh menutup pemberitahuan untuk versi tersebut.
+
+`versionCode` APK sentiasa meningkat (cap masa Unix atau `VERSION_CODE`), jadi Android menerima APK baharu sebagai kemas kini. `versionName` diambil daripada `package.json` supaya manifest dan APK sentiasa sepadan.
+
+Langkah mengeluarkan versi baharu:
+
+1. Naikkan `version` dalam `package.json` (contoh `1.1.1`).
+2. Bina APK: `npx cap sync android`, kemudian `./gradlew assembleCustomerDebug assembleSellerDebug` (atau release).
+3. Salin APK ke `release/Pizzadonia-Pelanggan.apk` dan `release/Pizzadonia-Penjual.apk`.
+4. Deploy: `npm run deploy` dan `npm run deploy:pages`. Manifest `/app-version.json` dijana secara automatik.
+
+Pilihan: cipta GitHub Release untuk arkib versi —
+
+```sh
+gh release create v1.1.0 release/Pizzadonia-Pelanggan.apk release/Pizzadonia-Penjual.apk
+```
+
+> Repo ini private, jadi aset GitHub Release tidak boleh dimuat turun tanpa token. App menggunakan APK yang dihoskan oleh Worker/Pages. Jika repo dijadikan awam, manifest boleh ditukar untuk menunjuk ke aset GitHub Release.
+
 ### Build tempatan (pilihan)
 
 Perlu Node.js 22, JDK 21 dan Android SDK 36:

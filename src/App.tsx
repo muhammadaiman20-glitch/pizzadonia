@@ -17,6 +17,7 @@ import { Testimonials } from './components/Testimonials'
 import { TrackTeaser } from './components/TrackTeaser'
 import { CartDrawer } from './components/CartDrawer'
 import { Toast } from './components/Toast'
+import { UpdateBanner } from './components/UpdateBanner'
 
 // Halaman dimuatkan secara berasingan supaya laman utama kekal ringan.
 const CheckoutView = lazy(() =>
@@ -217,6 +218,7 @@ function App() {
       />
 
       <Toast key={toast?.id ?? 'empty'} message={toast?.text ?? null} />
+      <UpdateBanner />
     </div>
   )
 }
