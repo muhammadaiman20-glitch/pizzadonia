@@ -217,7 +217,13 @@ function App() {
         onBrowse={goMenu}
       />
 
-      <Toast key={toast?.id ?? 'empty'} message={toast?.text ?? null} />
+      {!cartOpen && (
+        <Toast
+          key={toast?.id ?? 'empty'}
+          message={toast?.text ?? null}
+          raised={cart.count > 0 && pathname !== '/checkout'}
+        />
+      )}
       <UpdateBanner />
     </div>
   )
