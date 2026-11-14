@@ -218,7 +218,13 @@ Pilihan: cipta GitHub Release untuk arkib versi —
 gh release create v1.1.0 release/Pizzadonia-Pelanggan.apk release/Pizzadonia-Penjual.apk
 ```
 
-> Repo ini private, jadi aset GitHub Release tidak boleh dimuat turun tanpa token. App menggunakan APK yang dihoskan oleh Worker/Pages. Jika repo dijadikan awam, manifest boleh ditukar untuk menunjuk ke aset GitHub Release.
+Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
+
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.1.0
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.1.0/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.1.0/Pizzadonia-Penjual.apk
+
+Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
 ### Build tempatan (pilihan)
 
