@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  // Kekalkan ID asal supaya APK baru mengemas kini APK sedia ada.
-  appId: 'com.dev.app.finance',
+  // App pelanggan. App penjual menggunakan ID berasingan melalui product flavor.
+  appId: 'com.pizzadonia.app',
   appName: 'Pizzadonia',
   webDir: 'dist',
 

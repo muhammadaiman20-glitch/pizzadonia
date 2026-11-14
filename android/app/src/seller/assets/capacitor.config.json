@@ -1,0 +1,12 @@
+{
+	"appId": "com.pizzadonia.seller",
+	"appName": "Pizzadonia Penjual",
+	"webDir": "dist",
+	"server": {
+		"url": "https://pizzadonia.muhammadaiman20.workers.dev/seller",
+		"cleartext": false
+	},
+	"android": {
+		"allowMixedContent": false
+	}
+}

@@ -13,10 +13,10 @@ def keystoreKeyPassword = project.findProperty('ANDROID_KEY_PASSWORD') ?: System
 def hasKeystore = keystorePath && new File(keystorePath).exists()
 
 android {
-    namespace = "com.dev.app.finance"
+    namespace = "com.pizzadonia.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.dev.app.finance"
+        applicationId "com.pizzadonia.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
@@ -26,6 +26,18 @@ android {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    flavorDimensions += "app"
+    productFlavors {
+        // App pelanggan — laman kedai sahaja.
+        customer {
+            dimension "app"
+        }
+        // App penjual — terus membuka dashboard pada /seller.html.
+        seller {
+            dimension "app"
+            applicationId "com.pizzadonia.seller"
         }
     }
     signingConfigs {

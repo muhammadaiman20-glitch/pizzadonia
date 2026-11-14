@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pizzadonia Penjual</string>
+    <string name="title_activity_main">Pizzadonia Penjual</string>
+    <string name="package_name">com.pizzadonia.seller</string>
+    <string name="custom_url_scheme">com.pizzadonia.seller</string>
+</resources>

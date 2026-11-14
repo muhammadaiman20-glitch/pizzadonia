@@ -1,6 +1,6 @@
-export function Logo({ light = false }: { light?: boolean }) {
+export function Logo({ light = false, href = '#/' }: { light?: boolean; href?: string }) {
   return (
-    <a href="#/" className="group flex items-center gap-2.5" aria-label="Pizzadonia — laman utama">
+    <a href={href} className="group flex items-center gap-2.5" aria-label="Pizzadonia — laman utama">
       <img
         src="/logo.svg"
         alt=""

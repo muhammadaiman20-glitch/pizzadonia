@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ms">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#FFF7EC" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <title>Muat Turun APK — Pizzadonia</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --cream: #fff7ec;
+        --paper: #fffdf8;
+        --ink: #2a1c12;
+        --muted: #7d6a5b;
+        --line: #eadfce;
+        --tomato: #e23d2d;
+        --cheese: #f2a93b;
+        --basil: #2f7d4f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 15% 0%, rgba(242, 169, 59, 0.18), transparent 45%),
+          radial-gradient(circle at 90% 100%, rgba(226, 61, 45, 0.1), transparent 40%),
+          var(--cream);
+        color: var(--ink);
+        font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        padding: 32px 16px 56px;
+      }
+      .wrap { width: 100%; max-width: 680px; margin: 0 auto; }
+      .brand { display: flex; align-items: center; gap: 12px; justify-content: center; }
+      .brand img { width: 52px; height: 52px; }
+      .brand span { font-size: 30px; font-weight: 800; letter-spacing: 0.5px; }
+      .brand b { color: var(--tomato); }
+      h1 { margin: 28px 0 8px; text-align: center; font-size: clamp(24px, 6vw, 34px); line-height: 1.15; }
+      .lead { margin: 0 auto; max-width: 480px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.6; }
+      .grid { display: grid; gap: 14px; margin-top: 28px; }
+      @media (min-width: 560px) { .grid { grid-template-columns: 1fr 1fr; } }
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(80, 48, 20, 0.06);
+      }
+      .tag {
+        align-self: flex-start;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .tag-customer { background: rgba(242, 169, 59, 0.22); color: #7a4f00; }
+      .tag-seller { background: rgba(47, 125, 79, 0.14); color: var(--basil); }
+      .card h2 { margin: 0; font-size: 19px; }
+      .card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; flex: 1; }
+      .meta { font-size: 11px; font-weight: 700; color: var(--muted); }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 46px;
+        border-radius: 12px;
+        background: var(--ink);
+        color: var(--cream);
+        font-size: 14px;
+        font-weight: 800;
+        text-decoration: none;
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+      .btn:hover { transform: translateY(-1px); background: #3b281a; }
+      .btn-seller { background: var(--basil); }
+      .btn-seller:hover { background: #266941; }
+      .steps {
+        margin-top: 28px;
+        background: rgba(255, 253, 248, 0.75);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 20px 22px;
+      }
+      .steps h2 { margin: 0 0 10px; font-size: 16px; }
+      .steps ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+      .note { margin-top: 16px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+      .note b { color: var(--ink); }
+      footer { margin-top: 26px; text-align: center; font-size: 11px; color: var(--muted); }
+      footer a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="brand">
+        <img src="/logo.svg" alt="" />
+        <span>Pizza<b>donia</b></span>
+      </div>
+
+      <h1>Muat turun aplikasi</h1>
+      <p class="lead">
+        Dua app berasingan: satu untuk pelanggan membuat tempahan, satu lagi untuk penjual
+        mengurus tempahan. Kedua-duanya memuatkan laman produksi terkini secara langsung.
+      </p>
+
+      <div class="grid">
+        <section class="card">
+          <span class="tag tag-customer">Pelanggan</span>
+          <h2>Pizzadonia</h2>
+          <p>Lihat menu, buat tempahan, bayar dengan DuitNow QR dan jejak status tempahan.</p>
+          <span class="meta">Versi 1.0 · Android 7.0+ · 4.6 MB</span>
+          <a class="btn" href="/download/Pizzadonia-Pelanggan.apk" download>Muat turun APK</a>
+        </section>
+
+        <section class="card">
+          <span class="tag tag-seller">Penjual</span>
+          <h2>Pizzadonia Penjual</h2>
+          <p>Terus membuka dashboard tempahan. Masukkan PIN akses untuk mula mengurus pesanan.</p>
+          <span class="meta">Versi 1.0 · Android 7.0+ · 4.6 MB</span>
+          <a class="btn btn-seller" href="/download/Pizzadonia-Penjual.apk" download>Muat turun APK</a>
+        </section>
+      </div>
+
+      <section class="steps">
+        <h2>Cara pasang</h2>
+        <ol>
+          <li>Tekan butang muat turun di atas.</li>
+          <li>Buka fail APK yang dimuat turun.</li>
+          <li>Benarkan <b>Install unknown apps</b> untuk pelayar atau Files jika diminta.</li>
+          <li>Tekan <b>Install</b>, kemudian buka app.</li>
+        </ol>
+        <p class="note">
+          <b>Nota:</b> Jika telefon sudah ada app Pizzadonia lama dengan tanda tangan berbeza,
+          nyahpasang app lama dahulu. Kedua-dua app ini menggunakan ID berasingan, jadi ia boleh
+          dipasang bersama.
+        </p>
+      </section>
+
+      <footer>
+        <a href="/">Kembali ke laman Pizzadonia</a>
+      </footer>
+    </main>
+  </body>
+</html>

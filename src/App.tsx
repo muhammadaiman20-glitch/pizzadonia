@@ -28,9 +28,6 @@ const OrderSuccess = lazy(() =>
 const TrackView = lazy(() =>
   import('./pages/TrackView').then((module) => ({ default: module.TrackView })),
 )
-const Dashboard = lazy(() =>
-  import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })),
-)
 
 function RouteFallback() {
   return (
@@ -51,21 +48,10 @@ function App() {
   const cart = useCart()
   const {
     orders,
-    adminOrders,
-    adminState,
-    adminError,
-    source,
     addOrder,
     fetchOrder,
     searchOrders,
     confirmPayment,
-    loadAdminOrders,
-    updateStatus,
-    advanceStatus,
-    setPaymentStatus,
-    deleteOrder,
-    resetDemo,
-    clearAll,
   } = useOrders()
   const [cartOpen, setCartOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -83,7 +69,6 @@ function App() {
   // Muat turun chunk halaman lain semasa browser lapang supaya navigasi terasa pantas.
   useEffect(() => {
     const prefetch = () => {
-      void import('./pages/Dashboard')
       void import('./pages/CheckoutView')
       void import('./pages/TrackView')
     }
@@ -122,33 +107,12 @@ function App() {
   }, [navigate])
 
   const [pathname, query] = path.split('?')
-  const isDashboard = pathname === '/dashboard'
   const orderMatch = pathname.match(/^\/order\/(.+)$/)
   const orderId = orderMatch ? decodeURIComponent(orderMatch[1]) : null
   const currentOrder = orderId ? orders.find((order) => order.id === orderId) : undefined
   const trackQuery = new URLSearchParams(query ?? '').get('q') ?? ''
 
   const content = (() => {
-    if (isDashboard) {
-      return (
-        <Dashboard
-          orders={adminOrders}
-          fallbackOrders={orders}
-          source={source}
-          adminState={adminState}
-          adminError={adminError}
-          loadAdminOrders={loadAdminOrders}
-          updateStatus={updateStatus}
-          advanceStatus={advanceStatus}
-          setPaymentStatus={setPaymentStatus}
-          deleteOrder={deleteOrder}
-          resetDemo={resetDemo}
-          clearAll={clearAll}
-          notify={notify}
-        />
-      )
-    }
-
     if (pathname === '/checkout') {
       return (
         <CheckoutView
@@ -216,17 +180,15 @@ function App() {
         Langkau ke kandungan
       </a>
 
-      {!isDashboard && (
-        <Header cartCount={cart.count} onCart={() => setCartOpen(true)} onMenu={goMenu} onHow={goHow} />
-      )}
+      <Header cartCount={cart.count} onCart={() => setCartOpen(true)} onMenu={goMenu} onHow={goHow} />
 
       <main id="main">
         <Suspense fallback={<RouteFallback />}>{content}</Suspense>
       </main>
 
-      {!isDashboard && <Footer onMenu={goMenu} onHow={goHow} />}
+      <Footer onMenu={goMenu} onHow={goHow} />
 
-      {!isDashboard && cart.count > 0 && !cartOpen && pathname !== '/checkout' && (
+      {cart.count > 0 && !cartOpen && pathname !== '/checkout' && (
         <button
           type="button"
           onClick={() => setCartOpen(true)}

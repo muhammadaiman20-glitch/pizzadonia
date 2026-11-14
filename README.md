@@ -38,7 +38,7 @@ Prasyarat: Node.js **22.12+** untuk Wrangler (fail `.nvmrc` disediakan) dan akau
 ```sh
 npx wrangler secret put ADMIN_PIN   # PIN dashboard produksi, cth. 4821
 npm run db:init                     # cipta table pizzadonia_orders (sekali sahaja)
-npm run deploy                      # npm run build + wrangler deploy
+npm run deploy                      # build + salin APK ke dist/download + wrangler deploy
 ```
 
 URL selepas deploy: `https://pizzadonia.muhammadaiman20.workers.dev`
@@ -101,54 +101,64 @@ VITE_API_BASE=https://pizzadonia.muhammadaiman20.workers.dev/api npm run dev
 Laman **https://pizzadonia.pages.dev** boleh terus digunakan dengan backend Worker di atas. Bina dengan `VITE_API_BASE` supaya halaman awam memanggil API Worker:
 
 ```sh
-VITE_API_BASE=https://pizzadonia.muhammadaiman20.workers.dev/api npm run build
-npx wrangler pages deploy dist --project-name pizzadonia --branch main --commit-dirty=true
+npm run deploy:pages
 ```
 
-Kemudian bina semula tanpa `VITE_API_BASE` dan deploy Worker supaya ia menghidangkan UI + API pada origin yang sama:
+`deploy:pages` membina dengan `VITE_API_BASE`, menyalin APK daripada `release/` ke `dist/download/`, dan deploy ke Pages. Kemudian deploy Worker supaya ia menghidangkan UI + API pada origin yang sama:
 
 ```sh
-npm run build
-npx wrangler deploy
+npm run deploy
 ```
 
-Fallback SPA dikendalikan oleh `public/_redirects` dan tetapan `not_found_handling = "single-page-application"` dalam `wrangler.toml` (app guna hash routing).
+Fallback SPA dikendalikan oleh tetapan `not_found_handling = "single-page-application"` dalam `wrangler.toml` (app guna hash routing). Cloudflare menghidangkan `/seller` secara automatik daripada fail `seller.html`.
 
 > Selepas deploy Pages, buka URL pada telefon Android melalui **HTTPS**. Butang **Kongsi QR ke WhatsApp / app** akan membuka share sheet Android (Web Share API hanya aktif pada HTTPS/localhost).
 
 ## APK Android
 
-APK ini menggunakan identiti app sedia ada:
+Terdapat **dua app berasingan**:
 
-| Tetapan | Nilai |
-| --- | --- |
-| App ID (package) | `com.dev.app.finance` |
-| Nama app | `Pizzadonia` |
+| App | App ID | Nama | Fungsi |
+| --- | --- | --- | --- |
+| Pelanggan | `com.pizzadonia.app` | Pizzadonia | Laman kedai: menu, tempahan, bayaran, jejak status |
+| Penjual | `com.pizzadonia.seller` | Pizzadonia Penjual | Terus membuka dashboard tempahan pada `/seller.html` |
 
-> **Penting:** Jangan tukar `appId`. ID ini membolehkan APK baru **mengemas kini** app yang sudah dipasang, bukan memasang app kedua. Android juga mewajibkan APK kemas kini ditandatangani dengan **kunci yang sama** seperti APK asal.
-
-APK Capacitor memuatkan laman produksi secara langsung melalui `server.url` dalam `capacitor.config.ts`:
+Kedua-duanya menggunakan `server.url` Capacitor untuk memuatkan laman produksi secara langsung:
 
 ```ts
+// Pelanggan
 server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev' }
+
+// Penjual (flavor seller → android/app/src/seller/assets/capacitor.config.json)
+server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev/seller.html' }
 ```
 
 Maksudnya, selepas web/API dikemas kini, APK yang sudah dipasang **tidak perlu dibina semula** — ia terus memuatkan versi terkini. APK hanya perlu dibina semula jika konfigurasi native (ikon, nama app, permission, plugin) berubah.
 
+Kedua-dua app menggunakan logo Pizzadonia yang sama, termasuk ikon pelancar dan splash screen yang dijana daripada `public/logo.svg`.
+
+### Muat turun
+
+Selepas deploy, APK boleh dimuat turun di:
+
+- `/download` — halaman muat turun
+- `/download/Pizzadonia-Pelanggan.apk`
+- `/download/Pizzadonia-Penjual.apk`
+
 ### GitHub Actions (tanpa Android Studio)
 
-Workflow `.github/workflows/android.yml` membina APK secara automatik.
+Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 
 1. Push ke `main`, atau buka **Actions → Build Android APK → Run workflow**.
 2. Muat turun artifact `Pizzadonia-APK-<nombor>` (ZIP), kemudian ekstrak fail `.apk`.
-3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files). Jika signature sama, Android menawarkan **Update** dan data app dikekalkan.
+3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
 Tag seperti `v1.1.0` akan membina APK dan melampirkannya pada **GitHub Release**.
 
-### Kunci tandatangan untuk kemas kini APK sedia ada
+### Kunci tandatangan
 
-Untuk memasang APK baru di atas APK lama, ia mesti ditandatangani dengan kunci asal. Dapatkan fail keystore yang digunakan untuk membina APK sedia ada (biasanya `~/.android/debug.keystore` jika APK lama dibina sebagai debug oleh Android Studio), kemudian tambah **Repository secrets** di GitHub:
+Workflow membina APK debug secara lalai. Untuk APK release bertandatangan (contoh untuk edaran atau kemas kini app sedia ada), tambah **Repository secrets**:
 
 | Secret | Keterangan |
 | --- | --- |
@@ -165,7 +175,7 @@ base64 -w0 ~/.android/debug.keystore
 
 Nilai lalai untuk debug keystore Android Studio ialah alias `androiddebugkey`, kata laluan keystore `android`, dan kata laluan kunci `android`. Jika secret `ANDROID_KEYSTORE_BASE64` tiada, workflow membina APK debug dan memaparkan amaran.
 
-> Jika kunci asal tidak dapat ditemui, APK baru hanya boleh dipasang selepas app lama dinyahpasang — data tempatan akan hilang.
+> App pelanggan dan penjual mempunyai ID berbeza, jadi ia boleh dipasang bersama. Untuk mengemas kini app yang sama pada masa hadapan, gunakan kunci tandatangan yang sama.
 
 ### Build tempatan (pilihan)
 
@@ -176,27 +186,31 @@ npm ci
 npm run build
 npx cap sync android
 
-# APK debug
-cd android && ./gradlew assembleDebug
+# APK debug — dua flavor
+cd android && ./gradlew assembleCustomerDebug assembleSellerDebug
 
-# APK release bertandatangan (gunakan keystore sendiri)
+# APK release bertandatangan
 cd android && ANDROID_KEYSTORE_PATH=/path/keystore.jks \
   ANDROID_KEYSTORE_PASSWORD=... ANDROID_KEY_ALIAS=... ANDROID_KEY_PASSWORD=... \
-  ./gradlew assembleRelease
+  ./gradlew assembleCustomerRelease assembleSellerRelease
 ```
 
-APK debug terhasil di `android/app/build/outputs/apk/debug/app-debug.apk`, manakala APK release di `android/app/build/outputs/apk/release/`.
+APK terhasil di:
+
+- `android/app/build/outputs/apk/customer/debug/app-customer-debug.apk`
+- `android/app/build/outputs/apk/seller/debug/app-seller-debug.apk`
 
 ## Halaman
 
 | Laluan | Fungsi |
 | --- | --- |
-| `#/` | Landing page — hero, menu, cara tempah, testimoni |
+| `#/` | Landing page pelanggan — hero, menu, cara tempah, testimoni |
 | `#/menu` | Menu penuh |
 | `#/checkout` | Borang tempahan + ringkasan |
 | `#/order/:id` | Halaman tempahan berjaya + status |
 | `#/track` | Jejak tempahan ikut no. tempahan atau telefon |
-| `#/dashboard` | Dashboard penjual (PIN) |
+| `/seller` atau `/seller.html` | Dashboard penjual (PIN) — halaman berasingan, tiada pautan pada laman pelanggan |
+| `/download.html` | Muat turun APK pelanggan dan penjual |
 
 **PIN dashboard demo:** `0000`
 

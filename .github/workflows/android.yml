@@ -13,6 +13,7 @@ on:
       - 'src/**'
       - 'public/**'
       - 'index.html'
+      - 'seller.html'
       - 'vite.config.ts'
       - 'tailwind.config.js'
       - 'postcss.config.js'
@@ -24,7 +25,7 @@ permissions:
 
 jobs:
   apk:
-    name: Build APK
+    name: Build APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -69,7 +70,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build web app
+      - name: Build web apps
         env:
           VITE_API_BASE: https://pizzadonia.muhammadaiman20.workers.dev/api
         run: npm run build
@@ -77,9 +78,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      # Membina APK bertandatangan dengan keystore sedia ada jika secret
-      # ANDROID_KEYSTORE_BASE64 disediakan. Jika tidak, APK debug dihasilkan.
-      - name: Build APK
+      # Membina dua APK: pelanggan dan penjual. Guna keystore sedia ada jika
+      # secret ANDROID_KEYSTORE_BASE64 disediakan; jika tidak, APK debug.
+      - name: Build APKs
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
@@ -97,31 +98,42 @@ jobs:
           GRADLE_ARGS=(-PversionCode="${VERSION_CODE}" -PversionName="${VERSION_NAME}")
 
           if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            echo "Building signed release APK with existing keystore"
+            echo "Building signed release APKs with existing keystore"
             echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > app/keystore.jks
             export ANDROID_KEYSTORE_PATH="$PWD/app/keystore.jks"
             export ANDROID_KEYSTORE_PASSWORD="${ANDROID_KEYSTORE_PASSWORD}"
             export ANDROID_KEY_ALIAS="${ANDROID_KEY_ALIAS}"
             export ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD}"
-            ./gradlew assembleRelease --no-daemon "${GRADLE_ARGS[@]}"
-            APK_PATH=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+            ./gradlew assembleCustomerRelease assembleSellerRelease --no-daemon "${GRADLE_ARGS[@]}"
+            APK_DIR="build/outputs/apk"
+            CUSTOMER_APK=$(find app/${APK_DIR}/customer/release -name '*.apk' | head -n 1)
+            SELLER_APK=$(find app/${APK_DIR}/seller/release -name '*.apk' | head -n 1)
           else
-            echo "::warning::ANDROID_KEYSTORE_BASE64 not set; building debug APK. To update an existing install, provide the original signing keystore in repository secrets."
-            ./gradlew assembleDebug --no-daemon "${GRADLE_ARGS[@]}"
-            APK_PATH=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+            echo "::warning::ANDROID_KEYSTORE_BASE64 not set; building debug APKs."
+            ./gradlew assembleCustomerDebug assembleSellerDebug --no-daemon "${GRADLE_ARGS[@]}"
+            APK_DIR="build/outputs/apk"
+            CUSTOMER_APK=$(find app/${APK_DIR}/customer/debug -name '*.apk' | head -n 1)
+            SELLER_APK=$(find app/${APK_DIR}/seller/debug -name '*.apk' | head -n 1)
           fi
 
-          cp "${APK_PATH}" "../Pizzadonia-${VERSION_NAME}.apk"
+          cp "${CUSTOMER_APK}" "../Pizzadonia-Pelanggan-${VERSION_NAME}.apk"
+          cp "${SELLER_APK}" "../Pizzadonia-Penjual-${VERSION_NAME}.apk"
+          cp "${CUSTOMER_APK}" "../Pizzadonia-Pelanggan.apk"
+          cp "${SELLER_APK}" "../Pizzadonia-Penjual.apk"
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Pizzadonia-APK-${{ github.run_number }}
-          path: Pizzadonia-*.apk
+          path: |
+            Pizzadonia-Pelanggan-*.apk
+            Pizzadonia-Penjual-*.apk
           if-no-files-found: error
 
-      - name: Attach APK to GitHub Release
+      - name: Attach APKs to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: Pizzadonia-*.apk
+          files: |
+            Pizzadonia-Pelanggan-*.apk
+            Pizzadonia-Penjual-*.apk

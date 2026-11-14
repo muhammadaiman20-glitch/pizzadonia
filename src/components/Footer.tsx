@@ -1,4 +1,4 @@
-import { AtSign, Clock, LayoutDashboard, MapPin, MessageCircle } from 'lucide-react'
+import { AtSign, Clock, MapPin, MessageCircle } from 'lucide-react'
 import { SHOP } from '../config'
 import { Logo } from './Logo'
 
@@ -48,12 +48,6 @@ export function Footer({ onMenu, onHow }: FooterProps) {
               <li>
                 <a href="#/track" className="transition hover:text-cheese">
                   Jejak tempahan
-                </a>
-              </li>
-              <li>
-                <a href="#/dashboard" className="inline-flex items-center gap-1.5 transition hover:text-cheese">
-                  <LayoutDashboard className="h-3.5 w-3.5" />
-                  Dashboard penjual
                 </a>
               </li>
             </ul>

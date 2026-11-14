@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LayoutDashboard, Menu as MenuIcon, MessageCircle, ShoppingBag, X } from 'lucide-react'
+import { Menu as MenuIcon, MessageCircle, ShoppingBag, X } from 'lucide-react'
 import { SHOP } from '../config'
 import { Logo } from './Logo'
 
@@ -48,10 +48,6 @@ export function Header({ cartCount, onCart, onMenu, onHow }: HeaderProps) {
             </button>
             <a href="#/track" className="nav-link">
               Jejak Tempahan
-            </a>
-            <a href="#/dashboard" className="nav-link inline-flex items-center gap-1.5">
-              <LayoutDashboard className="h-3.5 w-3.5" />
-              Dashboard
             </a>
           </nav>
 
@@ -115,9 +111,6 @@ export function Header({ cartCount, onCart, onMenu, onHow }: HeaderProps) {
             </button>
             <a href="#/track" onClick={close} className="mobile-link">
               Jejak Tempahan
-            </a>
-            <a href="#/dashboard" onClick={close} className="mobile-link">
-              Dashboard Penjual
             </a>
             <a
               href={`https://wa.me/${SHOP.whatsapp}`}
