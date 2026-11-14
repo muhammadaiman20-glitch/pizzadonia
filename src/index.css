@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Lilita One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/lilita-one-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    @apply bg-cream font-sans text-ink antialiased;
+  }
+
+  ::selection {
+    @apply bg-cheese text-ink;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid #c9732a;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold transition duration-200 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn:active {
+    transform: scale(0.97);
+  }
+
+  .btn-red {
+    @apply bg-tomato-deep text-white shadow-pop hover:-translate-y-0.5 hover:bg-[#9a1e12];
+  }
+
+  .btn-ghost {
+    @apply border border-line bg-paper text-ink hover:border-crust/40 hover:bg-cream;
+  }
+
+  .field {
+    @apply w-full rounded-xl border-[1.5px] border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/60 focus:border-crust focus:ring-4 focus:ring-cheese/30;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted;
+  }
+
+  .error-text {
+    @apply mt-1 text-[11px] font-semibold text-tomato-deep;
+  }
+
+  .nav-link {
+    @apply rounded-full px-3.5 py-2 text-[12px] font-bold text-muted transition hover:bg-paper hover:text-ink;
+  }
+
+  .mobile-link {
+    @apply block rounded-xl px-3 py-2.5 text-sm font-bold text-ink transition hover:bg-cream;
+  }
+
+  .section-label {
+    @apply flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-tomato-deep;
+  }
+
+  .section-label::before {
+    content: '';
+    @apply inline-block h-1.5 w-1.5 rounded-full bg-tomato;
+  }
+}
+
+@layer utilities {
+  .dots {
+    background-image: radial-gradient(rgb(201 115 42 / 0.14) 1px, transparent 1.2px);
+    background-size: 18px 18px;
+  }
+
+  .dots-dark {
+    background-image: radial-gradient(rgb(255 247 236 / 0.08) 1px, transparent 1.2px);
+    background-size: 20px 20px;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .marquee {
+    animation: marquee 30s linear infinite;
+  }
+
+  .marquee:hover {
+    animation-play-state: paused;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out both;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-rise {
+    animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .animate-spin-slow {
+    animation: spinSlow 42s linear infinite;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .marquee,
+  .animate-fade-in,
+  .animate-slide-in,
+  .animate-rise,
+  .animate-spin-slow {
+    animation: none;
+  }
+}

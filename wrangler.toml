@@ -1,0 +1,21 @@
+# Pizzadonia — Worker (API + laman statik) dan D1.
+# Atur cara: `npm run deploy` (build + wrangler deploy).
+name = "pizzadonia"
+main = "worker/src/index.ts"
+compatibility_date = "2026-11-14"
+
+# Laman statik daripada `npm run build` dihidangkan oleh Worker yang sama.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# D1 sedia ada digunakan semula kerana had Free plan (10 DB) sudah penuh.
+# Table aplikasi: `pizzadonia_orders` (lihat worker/schema.sql).
+[[d1_databases]]
+binding = "DB"
+database_name = "kewanganku-sync"
+database_id = "e2a77376-2e7f-42e7-aee0-981a10d640ee"
+
+[observability]
+enabled = true
