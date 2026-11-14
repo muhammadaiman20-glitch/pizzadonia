@@ -116,6 +116,42 @@ Fallback SPA dikendalikan oleh `public/_redirects` dan tetapan `not_found_handli
 
 > Selepas deploy Pages, buka URL pada telefon Android melalui **HTTPS**. Butang **Kongsi QR ke WhatsApp / app** akan membuka share sheet Android (Web Share API hanya aktif pada HTTPS/localhost).
 
+## APK Android
+
+APK Capacitor memuatkan laman produksi secara langsung melalui `server.url` dalam `capacitor.config.ts`:
+
+```ts
+server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev' }
+```
+
+Maksudnya, selepas web/API dikemas kini, APK yang sudah dipasang **tidak perlu dibina semula** — ia terus memuatkan versi terkini. APK hanya perlu dibina semula jika konfigurasi native (ikon, nama app, permission, plugin) berubah.
+
+### GitHub Actions (tanpa Android Studio)
+
+Workflow `.github/workflows/android.yml` membina APK secara automatik.
+
+1. Push ke `main`, atau buka **Actions → Build Android APK → Run workflow**.
+2. Muat turun artifact `Pizzadonia-APK-<nombor>` (ZIP), kemudian ekstrak fail `.apk`.
+3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
+4. Untuk kemas kini APK, `versionCode` menggunakan nombor run GitHub. Workflow menyimpan cache kunci debug supaya APK baru mempunyai signature yang sama dan boleh dipasang sebagai kemas kini.
+
+Tag seperti `v1.1.0` akan membina APK dan melampirkannya pada **GitHub Release**.
+
+> APK ini menggunakan debug signing — sesuai untuk ujian dan pemasangan terus (sideload). Untuk Google Play, daftar release keystore sendiri dan tukar workflow kepada `assembleRelease`.
+
+### Build tempatan (pilihan)
+
+Perlu Node.js 22, JDK 21 dan Android SDK 36:
+
+```sh
+npm ci
+npm run build
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+APK terhasil di `android/app/build/outputs/apk/debug/app-debug.apk`.
+
 ## Halaman
 
 | Laluan | Fungsi |

@@ -44,12 +44,15 @@ const MAX_BODY_BYTES = 64 * 1024
 const MAX_BULK_ORDERS = 200
 const MAX_LOOKUP_RESULTS = 20
 
-/** Origin yang dibenarkan memanggil API dari domain lain (Vite dev / Pages). */
+/** Origin yang dibenarkan memanggil API dari domain lain (Vite dev / Pages / Capacitor). */
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:4173',
   'http://127.0.0.1:4173',
+  // APK Capacitor yang membundle UI sendiri (bukan `server.url`).
+  'https://localhost',
+  'capacitor://localhost',
 ])
 
 function isAllowedOrigin(origin: string): boolean {
