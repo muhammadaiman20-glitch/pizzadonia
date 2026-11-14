@@ -188,7 +188,7 @@ Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
-Tag seperti `v1.2.3` akan membina APK dan melampirkannya pada **GitHub Release**.
+Tag seperti `v1.2.4` akan membina APK dan melampirkannya pada **GitHub Release**.
 
 ### Kunci tandatangan
 
@@ -223,8 +223,8 @@ Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
 
 ```json
 {
-  "customer": { "versionName": "1.2.3", "url": "/download/Pizzadonia-Pelanggan.apk" },
-  "seller": { "versionName": "1.2.3", "url": "/download/Pizzadonia-Penjual.apk" }
+  "customer": { "versionName": "1.2.4", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.2.4", "url": "/download/Pizzadonia-Penjual.apk" }
 }
 ```
 
@@ -260,9 +260,9 @@ gh release create "v$VERSION" release/Pizzadonia-Pelanggan.apk release/Pizzadoni
 
 Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
 
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.3
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.3/Pizzadonia-Pelanggan.apk
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.3/Pizzadonia-Penjual.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.4
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.4/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.4/Pizzadonia-Penjual.apk
 
 Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
