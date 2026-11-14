@@ -3,8 +3,13 @@
 	"appName": "Pizzadonia Penjual",
 	"webDir": "dist",
 	"server": {
-		"url": "https://pizzadonia.muhammadaiman20.workers.dev/seller",
-		"cleartext": false
+		"url": "https://pizzadonia.pages.dev/seller",
+		"cleartext": false,
+		"errorPath": "offline-seller.html",
+		"allowNavigation": [
+			"pizzadonia.pages.dev",
+			"pizzadonia.muhammadaiman20.workers.dev"
+		]
 	},
 	"android": {
 		"allowMixedContent": false

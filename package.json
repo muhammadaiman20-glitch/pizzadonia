@@ -1,15 +1,16 @@
 {
   "name": "pizzadonia",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.2.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "sync:android": "npm run build && cap sync android",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "npm run build && node scripts/prepare-download.mjs && wrangler deploy",
-    "deploy:pages": "VITE_API_BASE=https://pizzadonia.muhammadaiman20.workers.dev/api npm run build && node scripts/prepare-download.mjs && wrangler pages deploy dist --project-name pizzadonia --branch main",
+    "deploy:pages": "npm run build && node scripts/prepare-download.mjs && wrangler pages deploy dist --project-name pizzadonia --branch main",
     "worker:dev": "wrangler dev",
     "typecheck:worker": "tsc -p worker/tsconfig.json",
     "db:init": "wrangler d1 execute kewanganku-sync --remote --file worker/schema.sql",

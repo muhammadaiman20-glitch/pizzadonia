@@ -41,7 +41,10 @@ npm run db:init                     # cipta table pizzadonia_orders (sekali saha
 npm run deploy                      # build + salin APK ke dist/download + wrangler deploy
 ```
 
-URL selepas deploy: `https://pizzadonia.muhammadaiman20.workers.dev`
+URL selepas deploy:
+
+- `https://pizzadonia.pages.dev` — UI utama + proxy API `/api` (disyorkan untuk app Android)
+- `https://pizzadonia.muhammadaiman20.workers.dev` — UI + API pada origin yang sama (sandaran)
 
 Fail berkaitan:
 
@@ -98,13 +101,13 @@ VITE_API_BASE=https://pizzadonia.muhammadaiman20.workers.dev/api npm run dev
 
 ### Cloudflare Pages (UI + API Worker)
 
-Laman **https://pizzadonia.pages.dev** boleh terus digunakan dengan backend Worker di atas. Bina dengan `VITE_API_BASE` supaya halaman awam memanggil API Worker:
+Laman **https://pizzadonia.pages.dev** menghidangkan UI dan memanggil API pada origin yang sama (`/api`). Permintaan itu diproksi ke Worker oleh `functions/api/[[path]].js` di sisi Cloudflare, jadi DNS pengguna tidak perlu menyelesaikan `workers.dev`.
 
 ```sh
 npm run deploy:pages
 ```
 
-`deploy:pages` membina dengan `VITE_API_BASE`, menyalin APK daripada `release/` ke `dist/download/`, dan deploy ke Pages. Kemudian deploy Worker supaya ia menghidangkan UI + API pada origin yang sama:
+`deploy:pages` membina bundle dengan `API_BASE` relatif (`/api`), menyalin APK daripada `release/` ke `dist/download/`, dan deploy ke Pages (termasuk Functions). Deploy Worker masih diperlukan untuk API dan laman workers.dev:
 
 ```sh
 npm run deploy
@@ -123,17 +126,27 @@ Terdapat **dua app berasingan**:
 | Pelanggan | `com.pizzadonia.app` | Pizzadonia | Laman kedai: menu, tempahan, bayaran, jejak status |
 | Penjual | `com.pizzadonia.seller` | Pizzadonia Penjual | Terus membuka dashboard tempahan pada `/seller.html` |
 
-Kedua-duanya menggunakan `server.url` Capacitor untuk memuatkan laman produksi secara langsung:
+Kedua-duanya menggunakan `server.url` Capacitor untuk memuatkan laman produksi secara langsung. Alamat utama ialah **pages.dev** kerana sesetengah ISP menyekat `*.workers.dev` (`ERR_NAME_NOT_RESOLVED`):
 
 ```ts
 // Pelanggan
-server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev' }
+server: {
+  url: 'https://pizzadonia.pages.dev',
+  errorPath: 'offline.html',
+  allowNavigation: ['pizzadonia.pages.dev', 'pizzadonia.muhammadaiman20.workers.dev'],
+}
 
 // Penjual (flavor seller → android/app/src/seller/assets/capacitor.config.json)
-server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev/seller.html' }
+server: {
+  url: 'https://pizzadonia.pages.dev/seller',
+  errorPath: 'offline-seller.html',
+  allowNavigation: ['pizzadonia.pages.dev', 'pizzadonia.muhammadaiman20.workers.dev'],
+}
 ```
 
-Maksudnya, selepas web/API dikemas kini, APK yang sudah dipasang **tidak perlu dibina semula** — ia terus memuatkan versi terkini. APK hanya perlu dibina semula jika konfigurasi native (ikon, nama app, permission, plugin) berubah.
+Jika halaman gagal dimuatkan (contoh DNS disekat atau tiada internet), app memaparkan halaman **Tidak dapat hubungi pelayan** daripada fail `public/offline.html` / `public/offline-seller.html` dengan butang **Cuba lagi** dan **Buka alamat sandaran** (workers.dev).
+
+Maksudnya, selepas web/API dikemas kini, APK yang sudah dipasang **tidak perlu dibina semula** — ia terus memuatkan versi terkini. APK hanya perlu dibina semula jika konfigurasi native (ikon, nama app, permission, plugin, `server.url`) berubah.
 
 Kedua-dua app mempunyai logo tersendiri:
 
@@ -161,7 +174,7 @@ Workflow `.github/workflows/android.yml` membina kedua-dua APK secara automatik.
 3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
 4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
-Tag seperti `v1.2.1` akan membina APK dan melampirkannya pada **GitHub Release**.
+Tag seperti `v1.2.2` akan membina APK dan melampirkannya pada **GitHub Release**.
 
 ### Kunci tandatangan
 
@@ -196,8 +209,8 @@ Contoh kandungan (dijana automatik daripada `package.json` semasa deploy):
 
 ```json
 {
-  "customer": { "versionName": "1.2.1", "url": "/download/Pizzadonia-Pelanggan.apk" },
-  "seller": { "versionName": "1.2.1", "url": "/download/Pizzadonia-Penjual.apk" }
+  "customer": { "versionName": "1.2.2", "url": "/download/Pizzadonia-Pelanggan.apk" },
+  "seller": { "versionName": "1.2.2", "url": "/download/Pizzadonia-Penjual.apk" }
 }
 ```
 
@@ -215,11 +228,12 @@ Plugin native: `android/app/src/main/java/com/pizzadonia/app/AppUpdaterPlugin.ja
 
 Langkah mengeluarkan versi baharu:
 
-1. Naikkan `version` dalam `package.json` (contoh `1.2.1`).
-2. Bina APK: `npx cap sync android`, kemudian `./gradlew assembleCustomerDebug assembleSellerDebug` (atau release).
-3. Salin APK ke `release/Pizzadonia-Pelanggan.apk` dan `release/Pizzadonia-Penjual.apk`.
-4. Deploy: `npm run deploy` dan `npm run deploy:pages`. Manifest `/app-version.json` dijana secara automatik.
-5. Pilihan: cipta GitHub Release untuk arkib versi.
+1. Naikkan `version` dalam `package.json` (contoh `1.2.3`).
+2. `npm run sync:android` — membina semula `dist` yang bersih (tanpa `dist/download`) dan menyalinnya ke Android. Ini penting: jika `cap sync` dijalankan selepas `npm run deploy:pages`, APK lama dalam `dist/download` akan turut dibundle dan saiz APK membengkak.
+3. Bina APK: `./gradlew assembleCustomerDebug assembleSellerDebug` (atau release).
+4. Salin APK ke `release/Pizzadonia-Pelanggan.apk` dan `release/Pizzadonia-Penjual.apk`.
+5. Deploy: `npm run deploy` dan `npm run deploy:pages`. Manifest `/app-version.json` dijana secara automatik.
+6. Pilihan: cipta GitHub Release untuk arkib versi.
 
 ```sh
 VERSION=$(node -p "require('./package.json').version")
@@ -230,9 +244,9 @@ gh release create "v$VERSION" release/Pizzadonia-Pelanggan.apk release/Pizzadoni
 
 Repo ini kini **awam**, jadi aset GitHub Release boleh dimuat turun tanpa login:
 
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.1
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.1/Pizzadonia-Pelanggan.apk
-- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.1/Pizzadonia-Penjual.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/tag/v1.2.2
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.2/Pizzadonia-Pelanggan.apk
+- https://github.com/muhammadaiman20-glitch/pizzadonia/releases/download/v1.2.2/Pizzadonia-Penjual.apk
 
 Manifest auto-update masih menunjuk ke APK yang dihoskan Worker/Pages kerana URL itu sentiasa memberi versi terkini selepas `npm run deploy`, tanpa perlu mencipta release baharu. Release GitHub berfungsi sebagai arkib/mirror setiap versi.
 
@@ -242,8 +256,7 @@ Perlu Node.js 22, JDK 21 dan Android SDK 36:
 
 ```sh
 npm ci
-npm run build
-npx cap sync android
+npm run sync:android
 
 # APK debug — dua flavor
 cd android && ./gradlew assembleCustomerDebug assembleSellerDebug
