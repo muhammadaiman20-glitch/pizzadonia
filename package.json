@@ -1,12 +1,13 @@
 {
   "name": "pizzadonia",
   "private": true,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "sync:android": "npm run build && cap sync android",
+    "apk:build": "npm run sync:android && node scripts/build-apk.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "npm run build && node scripts/prepare-download.mjs && wrangler deploy",

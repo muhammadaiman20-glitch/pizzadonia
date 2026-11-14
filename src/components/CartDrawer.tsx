@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { ArrowRight, Minus, Pizza, Plus, ShoppingBag, Trash2, X } from 'lucide-react'
 import { SHOP } from '../config'
 import { getPizza } from '../data/menu'
@@ -28,6 +28,7 @@ export function CartDrawer({
   const { items, subtotal, count } = cartDetails(lines)
   const remaining = Math.max(0, SHOP.delivery.freeAbove - subtotal)
   const progress = Math.min(100, (subtotal / SHOP.delivery.freeAbove) * 100)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -42,6 +43,43 @@ export function CartDrawer({
       window.removeEventListener('keydown', onKey)
     }
   }, [open, onClose])
+
+  // Bila beg dibuka, tatal supaya barang yang baru ditambah kelihatan penuh
+  // dan tidak tersorok di penghujung senarai.
+  useEffect(() => {
+    if (!open) return
+
+    const scrollToLast = () => {
+      const list = listRef.current
+      const last = list?.querySelector<HTMLElement>('li:last-child')
+      if (!list || !last) return
+
+      const listRect = list.getBoundingClientRect()
+      const lastRect = last.getBoundingClientRect()
+      const bottomTarget = list.scrollHeight - list.clientHeight
+      const lastTopAtBottom = lastRect.top - (bottomTarget - list.scrollTop)
+
+      // Jika tatal penuh ke bawah masih mengekalkan item terakhir, tatal penuh
+      // (supaya banner penghantaran percuma juga kelihatan). Jika tidak
+      // (skrin rendah), tatal sekadar cukup untuk item terakhir.
+      list.scrollTop =
+        lastTopAtBottom >= listRect.top + 4
+          ? bottomTarget
+          : Math.max(0, list.scrollTop + lastRect.bottom + 16 - listRect.bottom)
+    }
+
+    // Dua pusingan: susun atur (font/imej) kadangkala berubah selepas frame
+    // pertama, jadi ukur semula dan betulkan.
+    let second = 0
+    const first = requestAnimationFrame(() => {
+      scrollToLast()
+      second = requestAnimationFrame(scrollToLast)
+    })
+    return () => {
+      cancelAnimationFrame(first)
+      if (second) cancelAnimationFrame(second)
+    }
+  }, [open])
 
   if (!open) return null
 
@@ -94,7 +132,7 @@ export function CartDrawer({
           </div>
         ) : (
           <>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-4">
+            <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8 pt-4">
               <ul className="space-y-3">
                 {items.map((item) => {
                   const line = lines.find((entry) => entry.key === `${item.itemId}:${item.sizeId}`)
@@ -176,19 +214,19 @@ export function CartDrawer({
               )}
             </div>
 
-            <footer className="shrink-0 border-t border-line bg-paper px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_24px_-16px_rgb(42_26_18_/_0.35)]">
+            <footer className="shrink-0 border-t border-line bg-paper px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_24px_-16px_rgb(42_26_18_/_0.35)] [@media(max-height:480px)]:pb-3 [@media(max-height:480px)]:pt-2">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium text-muted">Subtotal</span>
                 <span className="font-display text-2xl leading-none tracking-wide text-ink">{rm(subtotal)}</span>
               </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+              <p className="mt-1 hidden text-[11px] leading-relaxed text-muted [@media(min-height:481px)]:block">
                 Penghantaran dari {rm(SHOP.delivery.fee)} · percuma untuk tempahan{' '}
                 {rm(SHOP.delivery.freeAbove)}+
               </p>
               <button
                 type="button"
                 onClick={onCheckout}
-                className="btn btn-red mt-3 h-12 w-full text-sm"
+                className="btn btn-red mt-3 h-12 w-full text-sm [@media(max-height:480px)]:mt-2 [@media(max-height:480px)]:h-11"
               >
                 Teruskan Tempahan
                 <ArrowRight className="h-4 w-4" />
@@ -196,7 +234,7 @@ export function CartDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="mt-1.5 w-full py-1 text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline"
+                className="mt-1.5 hidden w-full py-1 text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline [@media(min-height:481px)]:block"
               >
                 Terus lihat menu
               </button>
