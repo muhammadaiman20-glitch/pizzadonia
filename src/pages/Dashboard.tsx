@@ -99,7 +99,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
       <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-tomato/10 blur-3xl" />
       <div className="relative w-full max-w-sm">
         <div className="flex justify-center">
-          <Logo href="/" />
+          <Logo href="/" src="/logo-seller.svg" />
         </div>
         <form
           onSubmit={submit}
@@ -532,7 +532,7 @@ export function Dashboard({
       <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <Logo href="/" />
+            <Logo href="/" src="/logo-seller.svg" />
             <span className="hidden rounded-full bg-ink px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] text-cheese sm:inline-flex">
               Dashboard
             </span>

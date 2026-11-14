@@ -62,6 +62,8 @@
       .tag-customer { background: rgba(242, 169, 59, 0.22); color: #7a4f00; }
       .tag-seller { background: rgba(47, 125, 79, 0.14); color: var(--basil); }
       .card h2 { margin: 0; font-size: 19px; }
+      .apphead { display: flex; align-items: center; gap: 10px; }
+      .apphead img { width: 42px; height: 42px; }
       .card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; flex: 1; }
       .meta { font-size: 11px; font-weight: 700; color: var(--muted); }
       .btn {
@@ -112,7 +114,10 @@
       <div class="grid">
         <section class="card">
           <span class="tag tag-customer">Pelanggan</span>
-          <h2>Pizzadonia</h2>
+          <div class="apphead">
+            <img src="/logo.svg" alt="" />
+            <h2>Pizzadonia</h2>
+          </div>
           <p>Lihat menu, buat tempahan, bayar dengan DuitNow QR dan jejak status tempahan.</p>
           <span class="meta">Versi 1.0 · Android 7.0+ · 4.6 MB</span>
           <a class="btn" href="/download/Pizzadonia-Pelanggan.apk" download>Muat turun APK</a>
@@ -120,7 +125,10 @@
 
         <section class="card">
           <span class="tag tag-seller">Penjual</span>
-          <h2>Pizzadonia Penjual</h2>
+          <div class="apphead">
+            <img src="/logo-seller.svg" alt="" />
+            <h2>Pizzadonia Penjual</h2>
+          </div>
           <p>Terus membuka dashboard tempahan. Masukkan PIN akses untuk mula mengurus pesanan.</p>
           <span class="meta">Versi 1.0 · Android 7.0+ · 4.6 MB</span>
           <a class="btn btn-seller" href="/download/Pizzadonia-Penjual.apk" download>Muat turun APK</a>

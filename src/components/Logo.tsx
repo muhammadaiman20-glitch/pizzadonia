@@ -1,8 +1,16 @@
-export function Logo({ light = false, href = '#/' }: { light?: boolean; href?: string }) {
+export function Logo({
+  light = false,
+  href = '#/',
+  src = '/logo.svg',
+}: {
+  light?: boolean
+  href?: string
+  src?: string
+}) {
   return (
     <a href={href} className="group flex items-center gap-2.5" aria-label="Pizzadonia — laman utama">
       <img
-        src="/logo.svg"
+        src={src}
         alt=""
         className="h-10 w-10 drop-shadow-sm transition-transform duration-300 group-hover:-rotate-12"
       />

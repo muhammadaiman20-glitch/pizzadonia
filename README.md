@@ -135,7 +135,14 @@ server: { url: 'https://pizzadonia.muhammadaiman20.workers.dev/seller.html' }
 
 Maksudnya, selepas web/API dikemas kini, APK yang sudah dipasang **tidak perlu dibina semula** — ia terus memuatkan versi terkini. APK hanya perlu dibina semula jika konfigurasi native (ikon, nama app, permission, plugin) berubah.
 
-Kedua-dua app menggunakan logo Pizzadonia yang sama, termasuk ikon pelancar dan splash screen yang dijana daripada `public/logo.svg`.
+Kedua-dua app mempunyai logo tersendiri:
+
+| App | Fail logo | Rupa |
+| --- | --- | --- |
+| Pelanggan | `public/logo.svg` | Hirisan pizza oren (logo asal) |
+| Penjual | `public/logo-seller.svg` | Badge kedai hijau dengan awning dan hirisan pizza |
+
+Ikon pelancar dan splash screen setiap app dijana daripada logo masing-masing. Ikon penjual berada dalam `android/app/src/seller/res/` dan mengatasi ikon utama melalui product flavor.
 
 ### Muat turun
 
