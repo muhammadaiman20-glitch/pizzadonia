@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Pizzadonia</string>
     <string name="title_activity_main">Pizzadonia</string>
-    <string name="package_name">com.pizzadonia.app</string>
-    <string name="custom_url_scheme">com.pizzadonia.app</string>
+    <string name="package_name">com.dev.app.finance</string>
+    <string name="custom_url_scheme">com.dev.app.finance</string>
 </resources>

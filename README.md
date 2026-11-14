@@ -118,6 +118,15 @@ Fallback SPA dikendalikan oleh `public/_redirects` dan tetapan `not_found_handli
 
 ## APK Android
 
+APK ini menggunakan identiti app sedia ada:
+
+| Tetapan | Nilai |
+| --- | --- |
+| App ID (package) | `com.dev.app.finance` |
+| Nama app | `Pizzadonia` |
+
+> **Penting:** Jangan tukar `appId`. ID ini membolehkan APK baru **mengemas kini** app yang sudah dipasang, bukan memasang app kedua. Android juga mewajibkan APK kemas kini ditandatangani dengan **kunci yang sama** seperti APK asal.
+
 APK Capacitor memuatkan laman produksi secara langsung melalui `server.url` dalam `capacitor.config.ts`:
 
 ```ts
@@ -132,12 +141,31 @@ Workflow `.github/workflows/android.yml` membina APK secara automatik.
 
 1. Push ke `main`, atau buka **Actions → Build Android APK → Run workflow**.
 2. Muat turun artifact `Pizzadonia-APK-<nombor>` (ZIP), kemudian ekstrak fail `.apk`.
-3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files).
-4. Untuk kemas kini APK, `versionCode` menggunakan nombor run GitHub. Workflow menyimpan cache kunci debug supaya APK baru mempunyai signature yang sama dan boleh dipasang sebagai kemas kini.
+3. Pasang pada telefon (benarkan **Install unknown apps** untuk pelayar/files). Jika signature sama, Android menawarkan **Update** dan data app dikekalkan.
+4. `versionCode` menggunakan nombor run GitHub supaya setiap build lebih tinggi daripada build sebelumnya.
 
 Tag seperti `v1.1.0` akan membina APK dan melampirkannya pada **GitHub Release**.
 
-> APK ini menggunakan debug signing — sesuai untuk ujian dan pemasangan terus (sideload). Untuk Google Play, daftar release keystore sendiri dan tukar workflow kepada `assembleRelease`.
+### Kunci tandatangan untuk kemas kini APK sedia ada
+
+Untuk memasang APK baru di atas APK lama, ia mesti ditandatangani dengan kunci asal. Dapatkan fail keystore yang digunakan untuk membina APK sedia ada (biasanya `~/.android/debug.keystore` jika APK lama dibina sebagai debug oleh Android Studio), kemudian tambah **Repository secrets** di GitHub:
+
+| Secret | Keterangan |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Kandungan fail keystore dalam Base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | Kata laluan keystore |
+| `ANDROID_KEY_ALIAS` | Alias kunci |
+| `ANDROID_KEY_PASSWORD` | Kata laluan kunci |
+
+Bina nilai Base64 pada mesin yang mempunyai keystore:
+
+```sh
+base64 -w0 ~/.android/debug.keystore
+```
+
+Nilai lalai untuk debug keystore Android Studio ialah alias `androiddebugkey`, kata laluan keystore `android`, dan kata laluan kunci `android`. Jika secret `ANDROID_KEYSTORE_BASE64` tiada, workflow membina APK debug dan memaparkan amaran.
+
+> Jika kunci asal tidak dapat ditemui, APK baru hanya boleh dipasang selepas app lama dinyahpasang — data tempatan akan hilang.
 
 ### Build tempatan (pilihan)
 
@@ -147,10 +175,17 @@ Perlu Node.js 22, JDK 21 dan Android SDK 36:
 npm ci
 npm run build
 npx cap sync android
+
+# APK debug
 cd android && ./gradlew assembleDebug
+
+# APK release bertandatangan (gunakan keystore sendiri)
+cd android && ANDROID_KEYSTORE_PATH=/path/keystore.jks \
+  ANDROID_KEYSTORE_PASSWORD=... ANDROID_KEY_ALIAS=... ANDROID_KEY_PASSWORD=... \
+  ./gradlew assembleRelease
 ```
 
-APK terhasil di `android/app/build/outputs/apk/debug/app-debug.apk`.
+APK debug terhasil di `android/app/build/outputs/apk/debug/app-debug.apk`, manakala APK release di `android/app/build/outputs/apk/release/`.
 
 ## Halaman
 

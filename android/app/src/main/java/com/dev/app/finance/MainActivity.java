@@ -1,4 +1,4 @@
-package com.pizzadonia.app;
+package com.dev.app.finance;
 
 import com.getcapacitor.BridgeActivity;
 
