@@ -4,11 +4,12 @@ export function Logo({
   src = '/logo.svg',
 }: {
   light?: boolean
-  href?: string
+  /** `null` memaparkan logo tanpa pautan (untuk dashboard penjual). */
+  href?: string | null
   src?: string
 }) {
-  return (
-    <a href={href} className="group flex items-center gap-2.5" aria-label="Pizzadonia — laman utama">
+  const content = (
+    <>
       <img
         src={src}
         alt=""
@@ -19,6 +20,16 @@ export function Logo({
       >
         Pizza<span className="text-tomato">donia</span>
       </span>
+    </>
+  )
+
+  if (href === null) {
+    return <div className="flex items-center gap-2.5">{content}</div>
+  }
+
+  return (
+    <a href={href} className="group flex items-center gap-2.5" aria-label="Pizzadonia — laman utama">
+      {content}
     </a>
   )
 }

@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Copy,
   Flame,
-  Home,
   Lock,
   LogOut,
   MapPin,
@@ -99,7 +98,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
       <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-tomato/10 blur-3xl" />
       <div className="relative w-full max-w-sm">
         <div className="flex justify-center">
-          <Logo href="/" src="/logo-seller.svg" />
+          <Logo href={null} src="/logo-seller.svg" />
         </div>
         <form
           onSubmit={submit}
@@ -143,11 +142,6 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             </p>
           )}
         </form>
-        <p className="mt-4 text-center text-xs text-muted">
-          <a href="/" className="font-semibold underline-offset-4 hover:text-ink hover:underline">
-            ← Kembali ke laman Pizzadonia
-          </a>
-        </p>
       </div>
     </div>
   )
@@ -532,23 +526,12 @@ export function Dashboard({
       <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <Logo href="/" src="/logo-seller.svg" />
+            <Logo href={null} src="/logo-seller.svg" />
             <span className="hidden rounded-full bg-ink px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] text-cheese sm:inline-flex">
               Dashboard
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href="/"
-              className="grid h-9 w-9 place-items-center rounded-full border border-line bg-paper text-ink transition hover:border-crust/40 sm:hidden"
-              aria-label="Lihat laman"
-            >
-              <Home className="h-4 w-4" />
-            </a>
-            <a href="/" className="btn btn-ghost hidden h-9 px-3.5 text-[11px] sm:inline-flex">
-              <Home className="h-3.5 w-3.5" />
-              Lihat Laman
-            </a>
             <button type="button" onClick={logout} className="btn btn-ghost h-9 px-3.5 text-[11px]">
               <LogOut className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Log Keluar</span>
