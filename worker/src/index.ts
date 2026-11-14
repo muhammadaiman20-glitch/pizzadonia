@@ -8,6 +8,7 @@
  *  - `POST /api/orders/:id/payment`  pelanggan sahkan "sudah bayar" (pending)
  *
  * Laluan admin (token sesi `Authorization: Bearer <token>`):
+ *  - `GET    /api/auth/config`       panjang PIN (untuk auto-hantar borang)
  *  - `POST   /api/auth/login`        tukar PIN kepada token sesi
  *  - `GET    /api/orders`            senarai semua tempahan
  *  - `PATCH  /api/orders/:id`        tukar status / status bayaran
@@ -45,6 +46,9 @@ const LOGIN_MAX_ATTEMPTS = 8
 const MAX_PIN_LENGTH = 128
 const ORDER_STATUSES = new Set(['baru', 'diterima', 'dibakar', 'siap', 'selesai', 'batal'])
 const PAYMENT_STATUSES = new Set(['unpaid', 'pending', 'paid'])
+// COD (tunai semasa terima) tidak lagi diterima untuk tempahan baharu.
+// Tempahan lama dengan `cod` masih boleh dibaca dan dipaparkan.
+const PAYMENT_METHODS = new Set(['transfer', 'qr'])
 const ID_PATTERN = /^PZ-[0-9A-Za-z-]{4,40}$/
 const MAX_BODY_BYTES = 64 * 1024
 const MAX_BULK_ORDERS = 200
@@ -273,7 +277,7 @@ function parseOrder(value: unknown, admin = false): OrderRecord | null {
   }
   if (typeof order.phone !== 'string' || order.phone.length > 40) return null
   if (order.fulfilment !== 'delivery' && order.fulfilment !== 'pickup') return null
-  if (order.payment !== 'cod' && order.payment !== 'transfer' && order.payment !== 'qr') return null
+  if (typeof order.payment !== 'string' || !PAYMENT_METHODS.has(order.payment)) return null
   if (typeof order.address !== 'string' || order.address.length > 500) return null
   if (typeof order.notes === 'string' && order.notes.length > 1000 === false) {
     // nota panjang ditolak di bawah
@@ -593,6 +597,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (url.pathname === '/api/health') {
     return json(request, { ok: true, service: 'pizzadonia' })
+  }
+
+  // ---- Konfigurasi log masuk (panjang PIN untuk auto-hantar) ----
+  if (url.pathname === '/api/auth/config' && request.method === 'GET') {
+    return json(request, { pinLength: env.ADMIN_PIN ? env.ADMIN_PIN.length : 0 })
   }
 
   // ---- Log masuk akaun penjual (awam, PIN disemak di pelayan) ----

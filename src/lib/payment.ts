@@ -1,6 +1,7 @@
 import type { Payment, PaymentStatus } from '../types'
 
 export const PAYMENT_LABEL: Record<Payment, string> = {
+  // Hanya untuk tempahan lama; COD tidak lagi ditawarkan pada checkout.
   cod: 'Tunai (COD)',
   transfer: 'Transfer bank',
   qr: 'QR DuitNow',

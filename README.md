@@ -70,6 +70,7 @@ Laluan **awam** tidak memerlukan log masuk dan tidak mendedahkan senarai penuh t
 | Kaedah | Laluan | Auth | Fungsi |
 | --- | --- | --- | --- |
 | `GET` | `/api/health` | – | Semakan hidup |
+| `GET` | `/api/auth/config` | – | Panjang PIN untuk auto-hantar borang log masuk |
 | `POST` | `/api/auth/login` | PIN | Tukar PIN kepada token sesi penjual |
 | `POST` | `/api/orders` | – | Cipta tempahan (pelanggan) |
 | `GET` | `/api/orders/lookup?q=` | – | Cari ikut no. tempahan / telefon |
@@ -95,6 +96,8 @@ npx wrangler secret put AUTH_SECRET  # pilihan: kunci tandatangan token
 ```
 
 Jika `ADMIN_PIN` tidak ditetapkan, log masuk gagal tertutup (`503`) — tiada PIN lalai. `AUTH_SECRET` (jika ada) menandatangan token supaya menukar PIN tidak membatalkan sesi sedia ada. Token sah selama 12 jam dan cubaan log masuk dihadkan kepada 8 kali / 15 minit bagi setiap alamat IP.
+
+Dashboard mengambil panjang PIN daripada `/api/auth/config` dan **terus log masuk secara automatik** sebaik sahaja bilangan digit lengkap — pengguna tidak perlu menekan butang.
 
 ### Mod data: awan vs peranti
 
@@ -339,7 +342,7 @@ Tiada **deep link DuitNow sejagat** yang membolehkan laman web membuka mana-mana
 
 Aliran kekal: bayar dalam app bank → tekan **Saya sudah bayar** → hantar ke WhatsApp.
 
-> Pesanan **Tunai (COD)** dan **Transfer bank** masih membuka WhatsApp terus selepas checkout kerana tiada bayaran QR untuk disahkan.
+> Pilihan **Tunai (COD)** telah dibuang. Checkout hanya menawarkan **QR DuitNow** dan **Transfer bank**. Tempahan QR membuka WhatsApp hanya selepas pelanggan menekan **Saya sudah bayar**; tempahan transfer membuka WhatsApp untuk pengesahan bayaran.
 
 ## Lokasi peta (pilihan)
 
@@ -380,7 +383,7 @@ Oleh itu UI hanya memaparkan **QR asal** dan pelanggan menaip jumlah secara manu
 2. Isi nama, telefon, alamat/ambil sendiri, lokasi peta (pilihan), bayaran dan nota.
 3. Butang **Hantar ke WhatsApp** hanya aktif apabila nama, telefon dan alamat (jika penghantaran) lengkap. Jika belum, butang memaparkan maklumat yang masih kurang.
 4. Tekan butang utama:
-   - **Tunai / Transfer** → butiran tempahan terus dibuka dalam WhatsApp.
+   - **Transfer bank** → butiran tempahan terus dibuka dalam WhatsApp untuk pengesahan bayaran.
    - **QR DuitNow** → tempahan disimpan dahulu, QR asal dipaparkan (jumlah dimasukkan manual), dan WhatsApp hanya dibuka selepas pelanggan tekan **Saya sudah bayar**.
 5. Tempahan disimpan dengan status **Baru** — ke Cloudflare D1 jika API tersedia, jika tidak ke localStorage peranti.
 6. Penjual buka `/seller`, log masuk dengan PIN akaun penjual, dan kemas kini status:

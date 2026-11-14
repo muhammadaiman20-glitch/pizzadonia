@@ -17,6 +17,10 @@ export interface OrderItem {
 }
 
 export type Fulfilment = 'delivery' | 'pickup'
+/**
+ * `cod` dikekalkan untuk memaparkan tempahan lama. Tempahan baharu hanya
+ * boleh menggunakan `transfer` atau `qr` — pilihan COD dibuang.
+ */
 export type Payment = 'cod' | 'transfer' | 'qr'
 export type PaymentStatus = 'unpaid' | 'pending' | 'paid'
 

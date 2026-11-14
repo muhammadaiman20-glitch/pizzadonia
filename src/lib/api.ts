@@ -150,6 +150,12 @@ export async function confirmPayment(id: string): Promise<Order> {
 
 // ---- Log masuk akaun penjual ----
 
+/** Panjang PIN (disemak pelayan) untuk auto-hantar borang log masuk. */
+export async function getAuthConfig(): Promise<number> {
+  const data = await request<{ pinLength: number }>('/auth/config')
+  return data.pinLength
+}
+
 /** Tukar PIN akaun penjual kepada token sesi. PIN disemak di pelayan. */
 export async function loginAdmin(pin: string): Promise<void> {
   const data = await request<{ token: string }>('/auth/login', {

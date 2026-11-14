@@ -28,6 +28,7 @@ import { SHOP, STATUS_META, type OrderStatus } from '../config'
 import {
   clearAdminToken,
   getAdminToken,
+  getAuthConfig,
   loginAdmin,
   onAuthExpired,
 } from '../lib/api'
@@ -62,19 +63,34 @@ const FILTERS: Filter[] = ['semua', 'baru', 'diterima', 'dibakar', 'siap', 'sele
 
 function PinGate({ onSuccess }: { onSuccess: () => void }) {
   const [pin, setPin] = useState('')
+  // Panjang PIN diambil daripada pelayan supaya borang boleh auto-hantar
+  // sebaik sahaja bilangan digit lengkap. `null` = belum diketahui.
+  const [pinLength, setPinLength] = useState<number | null>(null)
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (checking) return
-
-    const value = pin.trim()
-    if (!value) {
-      setError('Masukkan PIN akaun penjual.')
-      return
+  useEffect(() => {
+    let active = true
+    getAuthConfig()
+      .then((length) => {
+        if (!active) return
+        setPinLength(Number.isInteger(length) && length > 0 && length <= 32 ? length : null)
+        setReady(true)
+      })
+      .catch(() => {
+        if (!active) return
+        // Jika konfigurasi gagal, benarkan taip manual tanpa auto-hantar.
+        setPinLength(null)
+        setReady(true)
+      })
+    return () => {
+      active = false
     }
+  }, [])
 
+  const authenticate = async (value: string) => {
+    if (checking) return
     setChecking(true)
     setError('')
     try {
@@ -87,6 +103,29 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
       setPin('')
     } finally {
       setChecking(false)
+    }
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (checking || !ready) return
+
+    const value = pin.trim()
+    if (!value) {
+      setError('Masukkan PIN akaun penjual.')
+      return
+    }
+    void authenticate(value)
+  }
+
+  const handlePinChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, pinLength ?? 32)
+    setPin(digits)
+    setError('')
+
+    // Masuk automatik sebaik sahaja PIN lengkap — tanpa tekan butang.
+    if (pinLength !== null && digits.length === pinLength && !checking) {
+      void authenticate(digits)
     }
   }
 
@@ -109,7 +148,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             Dashboard penjual
           </h1>
           <p className="mt-1.5 text-center text-xs leading-relaxed text-muted">
-            Masukkan PIN akaun penjual. Hanya akaun sebenar dibenarkan masuk.
+            Masukkan PIN akaun penjual. Dashboard akan terbuka secara automatik apabila PIN lengkap.
           </p>
 
           <label htmlFor="pin" className="label mt-6">
@@ -121,14 +160,11 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             inputMode="numeric"
             autoComplete="current-password"
             value={pin}
-            onChange={(event) => {
-              setPin(event.target.value.replace(/\D/g, '').slice(0, 32))
-              setError('')
-            }}
+            onChange={(event) => handlePinChange(event.target.value)}
             className="field text-center text-lg tracking-[0.5em]"
-            placeholder="••••"
-            maxLength={32}
-            disabled={checking}
+            placeholder={ready ? '••••' : 'Menyediakan…'}
+            maxLength={pinLength ?? 32}
+            disabled={checking || !ready}
             autoFocus
           />
           {error && <p className="error-text text-center">{error}</p>}
@@ -136,7 +172,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           <button
             type="submit"
             className="btn btn-red mt-4 h-11 w-full text-sm"
-            disabled={checking}
+            disabled={checking || !ready}
           >
             {checking ? 'Menyemak…' : 'Masuk Dashboard'}
             <ArrowRight className="h-4 w-4" />

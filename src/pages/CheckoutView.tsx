@@ -4,7 +4,6 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  Banknote,
   Bike,
   CheckCircle2,
   Link2,
@@ -58,7 +57,7 @@ export function CheckoutView({
   const [phone, setPhone] = useState('')
   const [fulfilment, setFulfilment] = useState<Fulfilment>('delivery')
   const [address, setAddress] = useState('')
-  const [payment, setPayment] = useState<Payment>('cod')
+  const [payment, setPayment] = useState<Payment>('qr')
   const [notes, setNotes] = useState('')
   const [location, setLocation] = useState<OrderLocation | null>(null)
   const [locating, setLocating] = useState(false)
@@ -450,11 +449,10 @@ export function CheckoutView({
               <h2 className="font-display text-xl tracking-wide text-ink">Cara bayaran</h2>
             </div>
 
-            <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2">
               {[
-                { id: 'cod' as const, icon: Banknote, title: 'Tunai (COD)', desc: 'Bayar semasa terima' },
-                { id: 'transfer' as const, icon: Wallet, title: 'Transfer bank', desc: 'Butiran diberi di WhatsApp' },
                 { id: 'qr' as const, icon: QrCode, title: 'QR DuitNow', desc: 'Scan & bayar terus' },
+                { id: 'transfer' as const, icon: Wallet, title: 'Transfer bank', desc: 'Butiran diberi di WhatsApp' },
               ].map((option) => {
                 const Icon = option.icon
                 const active = payment === option.id
